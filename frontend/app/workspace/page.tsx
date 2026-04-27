@@ -1,11 +1,9 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Loader2, Plus, Send, User } from "lucide-react";
+import { Bot, Download, FileText, Loader2, Plus, Save, Send, User } from "lucide-react";
 import { api } from "@/lib/api";
-import { AgentTimeline } from "@/components/agent/agent-timeline";
-import { ReviewerPanel } from "@/components/agent/reviewer-panel";
 
-const tabs = ["当前文件", "Agent 执行轨迹", "检索证据", "PRD 草稿", "Reviewer 评审", "Evaluation 指标"] as const;
+const tabs = ["当前文件", "Feedback Inbox", "Insight Cluster", "PRD"] as const;
 
 export default function WorkspacePage() {
   const [conversation, setConversation] = useState<any>();
@@ -37,10 +35,8 @@ export default function WorkspacePage() {
           return;
         } catch {}
       }
-      const created = await api.createConversation("需求发现会话");
-      window.localStorage.setItem("feedbackos.currentConversationId", created.id);
-      setConversation(created);
-      await load(created.id);
+      setConversation(undefined);
+      setWorkspace(undefined);
     }
     boot().catch(console.error);
   }, []);
@@ -55,22 +51,31 @@ export default function WorkspacePage() {
   }
 
   async function newConversation() {
+    window.localStorage.removeItem("feedbackos.currentConversationId");
+    setConversation(undefined);
+    setWorkspace(undefined);
+    setTask("");
+    await refreshHistory();
+  }
+
+  async function ensureCurrentConversation() {
+    if (conversation?.id) return conversation;
     const created = await api.createConversation("需求发现会话");
     window.localStorage.setItem("feedbackos.currentConversationId", created.id);
     setConversation(created);
-    setTask("");
-    await load(created.id);
+    return created;
   }
 
   async function upload(file?: File) {
-    if (!file || !conversation?.id) return;
+    if (!file) return;
     setBusy(true);
     try {
-      const uploaded = await api.upload(file, conversation.id);
+      const current = await ensureCurrentConversation();
+      const uploaded = await api.upload(file, current.id);
       const parsed = await api.parseFile(uploaded.id);
       await api.confirmSchema(uploaded.id, parsed.schema?.mapping || {});
       await api.ingestFile(uploaded.id);
-      await load(conversation.id);
+      await load(current.id);
       setActiveTab("当前文件");
     } finally {
       setBusy(false);
@@ -79,19 +84,20 @@ export default function WorkspacePage() {
   }
 
   async function send() {
-    if (!conversation?.id || !task.trim()) return;
+    if (!task.trim()) return;
     setBusy(true);
     try {
-      await api.runAgent(task, conversation.id);
+      const current = await ensureCurrentConversation();
+      await api.runAgent(task, current.id);
       setTask("");
-      await load(conversation.id);
-      setActiveTab("Agent 执行轨迹");
+      await load(current.id);
+      setActiveTab("PRD");
     } finally {
       setBusy(false);
     }
   }
 
-  return <div className="grid h-[calc(100vh-6.5rem)] grid-cols-[260px_minmax(0,1fr)_430px] gap-4">
+  return <div className="grid h-[calc(100vh-6.5rem)] grid-cols-[260px_minmax(0,1fr)_460px] gap-4">
     <aside className="card min-h-0 overflow-hidden">
       <div className="flex items-center justify-between border-b border-line p-3">
         <div className="text-sm font-semibold">会话历史</div>
@@ -102,17 +108,14 @@ export default function WorkspacePage() {
         {conversations.map(row => <button key={row.id} onClick={() => switchConversation(row.id)} className={`w-full rounded-md border p-3 text-left text-sm hover:bg-slate-50 ${conversation?.id === row.id ? "border-brand bg-[#e9f3f2]" : "border-line bg-white"}`}>
           <div className="truncate font-medium">{row.title}</div>
           <div className="mt-1 truncate text-xs text-muted">{row.id}</div>
-          <div className="mt-2 text-xs text-muted">{row.message_count} messages</div>
+          <div className="mt-2 text-xs text-muted">{row.message_count} messages · {row.file_count || 0} files</div>
         </button>)}
       </div>
     </aside>
 
     <section className="card flex min-h-0 flex-col overflow-hidden">
-      <div className="flex items-center justify-between border-b border-line p-4">
-        <div>
-          <h1 className="text-xl font-semibold">Agent Workspace</h1>
-          <p className="text-xs text-muted">conversation_id: {conversation?.id || "creating..."}</p>
-        </div>
+      <div className="border-b border-line p-4">
+        <h1 className="text-xl font-semibold">Agent Workspace</h1>
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
@@ -140,11 +143,9 @@ export default function WorkspacePage() {
       </div>
       <div className="h-[calc(100%-4rem)] overflow-y-auto p-4">
         {activeTab === "当前文件" && <FilePanel files={workspace?.files || []} />}
-        {activeTab === "Agent 执行轨迹" && <AgentTimeline steps={workspace?.steps || []} />}
-        {activeTab === "检索证据" && <EvidencePanel items={workspace?.retrieved_feedback || []} />}
-        {activeTab === "PRD 草稿" && <PrdPanel prds={workspace?.prds || []} />}
-        {activeTab === "Reviewer 评审" && <ReviewerPanel data={workspace?.reviewer_result} />}
-        {activeTab === "Evaluation 指标" && <EvaluationPanel data={workspace?.evaluation} />}
+        {activeTab === "Feedback Inbox" && <FeedbackPanel items={workspace?.feedback || []} />}
+        {activeTab === "Insight Cluster" && <ClusterPanel clusters={workspace?.clusters || []} />}
+        {activeTab === "PRD" && <PrdPanel prds={workspace?.prds || []} reviewer={workspace?.reviewer_result} onSaved={() => conversation?.id && load(conversation.id)} />}
       </div>
     </aside>
   </div>;
@@ -159,28 +160,56 @@ function FilePanel({ files }: { files: any[] }) {
   </div>)}</div>;
 }
 
-function EvidencePanel({ items }: { items: any[] }) {
-  if (!items.length) return <p className="text-sm text-muted">运行 Agent 后展示当前会话召回证据。</p>;
-  return <div className="space-y-3">{items.map(item => <blockquote key={item.id} className="rounded-md border border-line bg-slate-50 p-3 text-sm">
-    #{item.id} {item.feedback_text}
-    <div className="mt-2 flex gap-2"><span className="badge">{item.product_module}</span><span className="badge">{item.sentiment_label}</span></div>
-  </blockquote>)}</div>;
+function FeedbackPanel({ items }: { items: any[] }) {
+  if (!items.length) return <p className="text-sm text-muted">当前会话还没有反馈数据。</p>;
+  return <div className="space-y-3">{items.map(item => <article key={item.id} className="rounded-md border border-line p-3">
+    <p className="text-sm leading-6">{item.feedback_text}</p>
+    <p className="mt-2 text-xs text-muted">{item.feedback_summary}</p>
+    <div className="mt-2 flex flex-wrap gap-2"><span className="badge">{item.product_module}</span><span className="badge">{item.sentiment_label}</span><span className="badge">{item.severity_label}</span><span className="badge">{item.issue_type}</span></div>
+  </article>)}</div>;
 }
 
-function PrdPanel({ prds }: { prds: any[] }) {
-  if (!prds.length) return <p className="text-sm text-muted">当前会话还没有 PRD 草稿。</p>;
-  return <article className="prose prose-sm max-w-none whitespace-pre-wrap rounded-md border border-line bg-white p-3 text-sm leading-6">{prds[0].prd_markdown}</article>;
+function ClusterPanel({ clusters }: { clusters: any[] }) {
+  if (!clusters.length) return <p className="text-sm text-muted">运行 Agent 后展示痛点聚类。</p>;
+  return <div className="space-y-3">{clusters.map(cluster => <section key={cluster.id} className="rounded-md border border-line p-3">
+    <div className="font-medium">{cluster.cluster_name}</div>
+    <p className="mt-2 text-sm text-muted">{cluster.cluster_summary}</p>
+    <div className="mt-2 flex flex-wrap gap-2"><span className="badge">{cluster.feedback_count} 条</span><span className="badge">负面率 {Math.round((cluster.negative_ratio || 0) * 100)}%</span><span className="badge">severity {cluster.severity_score}</span></div>
+  </section>)}</div>;
 }
 
-function EvaluationPanel({ data }: { data: any }) {
-  if (!data) return <p className="text-sm text-muted">暂无指标。</p>;
-  const rows = [
-    ["Agent Run", data.overview?.agent_run_total],
-    ["成功率", data.overview?.agent_run_success_rate],
-    ["LLM 调用", data.llm?.llm_call_count],
-    ["检索次数", data.retrieval?.retrieval_count],
-    ["PRD 完整度", data.quality?.prd_completeness_avg],
-    ["平均压缩率", data.compression?.avg_compression_rate],
-  ];
-  return <div className="grid grid-cols-2 gap-3">{rows.map(([k, v]) => <div key={String(k)} className="rounded-md border border-line p-3"><div className="text-xs text-muted">{k}</div><div className="mt-1 text-lg font-semibold">{String(v ?? 0)}</div></div>)}</div>;
+function PrdPanel({ prds, reviewer, onSaved }: { prds: any[]; reviewer?: any; onSaved: () => void }) {
+  const latest = prds[0];
+  const [text, setText] = useState("");
+  useEffect(() => { setText(latest?.prd_markdown || ""); }, [latest?.id, latest?.prd_markdown]);
+
+  if (!latest) return <p className="text-sm text-muted">当前会话还没有 PRD 草稿。</p>;
+
+  function exportMarkdown() {
+    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${latest.title || "prd"}.md`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  async function save() {
+    await api.updatePrd(latest.id, text);
+    onSaved();
+  }
+
+  return <div className="space-y-3">
+    <div className="flex flex-wrap gap-2">
+      <button className="btn" onClick={save}><Save size={14} />保存</button>
+      <button className="btn" onClick={exportMarkdown}><Download size={14} />Markdown</button>
+      <button className="btn" onClick={() => api.exportPrdDocx(latest.title, text)}><FileText size={14} />DOCX</button>
+    </div>
+    {reviewer && <div className="rounded-md border border-line bg-slate-50 p-3 text-sm">
+      <div className="font-medium">Reviewer 评分：{reviewer.quality_score ?? 0}</div>
+      <div className="mt-1 text-xs text-muted">完整度 {reviewer.prd_completeness_score ?? 0} · 风险 {reviewer.hallucination_risk || "unknown"}</div>
+    </div>}
+    <textarea className="min-h-[560px] w-full resize-y rounded-md border border-line bg-white p-3 font-mono text-sm leading-6 outline-none focus:border-brand" value={text} onChange={(e) => setText(e.target.value)} />
+  </div>;
 }

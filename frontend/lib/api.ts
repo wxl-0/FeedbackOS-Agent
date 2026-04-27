@@ -6,6 +6,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+async function download(path: string, filename: string, init?: RequestInit): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, init);
+  if (!res.ok) throw new Error(await res.text());
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
+
 export const api = {
   createConversation: (title?: string) => request<any>("/api/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) }),
   conversations: () => request<any[]>("/api/conversations"),
@@ -31,6 +43,8 @@ export const api = {
   prds: (conversationId?: string) => request<any[]>(`/api/prd${conversationId ? `?conversation_id=${conversationId}` : ""}`),
   generatePrd: (opportunity_id: number, conversation_id?: string) => request<any>("/api/prd/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ opportunity_id, conversation_id }) }),
   reviewPrd: (id: number) => request<any>(`/api/prd/${id}/review`, { method: "POST" }),
+  updatePrd: (id: number, prd_markdown: string) => request<any>(`/api/prd/${id}/update`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prd_markdown }) }),
+  exportPrdDocx: (title: string, prd_markdown: string) => download("/api/prd/export-docx", `${title || "prd"}.docx`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, prd_markdown }) }),
   memory: () => request<any>("/api/memory"),
   confirmMemory: (memory_id: number, confirmed = true) => request<any>("/api/memory/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memory_id, memory_type: "project", confirmed }) }),
   evaluation: async (conversationId?: string) => {

@@ -19,6 +19,7 @@ class AgentState(TypedDict, total=False):
     agent_steps: list[dict[str, Any]]
     step_summaries: list[str]
     draft_prd: str
+    current_prd_id: int
     reviewer_result: dict[str, Any]
     needs_human_review: bool
     final_output: str
