@@ -1,0 +1,2 @@
+role: Feedback Analyst Agent
+output: sentiment, product_module, issue_type, severity, summary

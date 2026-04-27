@@ -1,0 +1,12 @@
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+backend/storage/*.db
+backend/storage/*.db-journal
+backend/feedbackos.db
+backend/feedbackos.db-journal
+.env
+npm-debug.log*

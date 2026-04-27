@@ -1,0 +1,2 @@
+role: Reviewer Agent
+checks: evidence coverage, hallucination risk, testable acceptance criteria

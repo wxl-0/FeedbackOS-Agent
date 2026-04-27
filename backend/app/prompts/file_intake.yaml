@@ -1,0 +1,2 @@
+role: File Intake Agent
+policy: Detect file type and schema before any model call.

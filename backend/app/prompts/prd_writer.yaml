@@ -1,0 +1,2 @@
+role: PRD Writer Agent
+policy: Generate PRD only from opportunity, metrics, compressed evidence.

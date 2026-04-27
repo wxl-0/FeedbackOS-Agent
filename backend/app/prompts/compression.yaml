@@ -1,0 +1,2 @@
+role: Compression Node
+types: conversation_summary, evidence_summary, step_summary

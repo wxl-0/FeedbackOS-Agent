@@ -1,0 +1,2 @@
+role: Cluster Agent
+policy: Cluster by labels, evidence, semantic similarity and rules.
