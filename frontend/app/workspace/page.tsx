@@ -198,19 +198,36 @@ function FilePanel({ files }: { files: any[] }) {
 }
 
 function FeedbackPanel({ items }: { items: any[] }) {
+  const [sentiment, setSentiment] = useState("all");
   if (!items.length) return <p className="text-sm text-muted">当前会话还没有反馈数据。</p>;
-  return <div className="grid grid-cols-2 gap-3">{items.map((item) => (
-    <article key={item.id} className="rounded-md border border-line p-3">
-      <p className="text-sm leading-6">{item.feedback_text}</p>
-      <p className="mt-2 text-xs text-muted">{item.feedback_summary}</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <span className="badge">{item.product_module}</span>
-        <span className="badge">{item.sentiment_label}</span>
-        <span className="badge">{item.severity_label}</span>
-        <span className="badge">{item.issue_type}</span>
+  const filtered = sentiment === "all" ? items : items.filter((item) => item.sentiment_label === sentiment);
+  return <div className="space-y-3">
+    <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-slate-50 p-3">
+      <div>
+        <div className="text-sm font-medium">情绪筛选</div>
+        <div className="text-xs text-muted">当前显示 {filtered.length} / {items.length} 条反馈</div>
       </div>
-    </article>
-  ))}</div>;
+      <select className="input h-9 w-36 bg-white" value={sentiment} onChange={(e) => setSentiment(e.target.value)}>
+        <option value="all">全部情绪</option>
+        <option value="positive">正向</option>
+        <option value="neutral">中性</option>
+        <option value="negative">负向</option>
+      </select>
+    </div>
+    {filtered.length === 0 && <p className="rounded-md border border-dashed border-line p-6 text-center text-sm text-muted">没有匹配当前情绪条件的反馈。</p>}
+    <div className="grid grid-cols-2 gap-3">{filtered.map((item) => (
+      <article key={item.id} className="rounded-md border border-line p-3">
+        <p className="text-sm leading-6">{item.feedback_text}</p>
+        <p className="mt-2 text-xs text-muted">{item.feedback_summary}</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <span className="badge">{item.product_module}</span>
+          <span className="badge">{item.sentiment_label}</span>
+          <span className="badge">{item.severity_label}</span>
+          <span className="badge">{item.issue_type}</span>
+        </div>
+      </article>
+    ))}</div>
+  </div>;
 }
 
 function ClusterPanel({ clusters }: { clusters: any[] }) {
