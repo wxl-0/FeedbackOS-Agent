@@ -1,12 +1,11 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, History, MessageSquareText } from "lucide-react";
+import { BarChart3, MessageSquareText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   ["Agent Workspace", "/workspace", MessageSquareText],
-  ["Conversation History", "/conversation-history", History],
   ["Evaluation", "/evaluation", BarChart3]
 ] as const;
 
