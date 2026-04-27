@@ -1,39 +1,94 @@
-# FeedbackOS Agent｜AI 产品需求发现多智能体平台
+# FeedBackOS
 
-FeedbackOS Agent 是面向产品经理的 Chat-first 多智能体需求发现工作台。系统以 Agent Workspace 为主入口，用户在同一个聊天会话里上传文件、发起分析任务、查看执行轨迹、检索证据、PRD 草稿、Reviewer 评审和 Evaluation 指标。每个会话都有独立 `conversation_id`，上传文件必须绑定当前会话，Agent 每次只分析当前 `conversation_id` 下的文件和入库数据。
+FeedBackOS 是一个面向产品经理的 Chat-first AI 需求发现工作台。用户在一个聊天会话中上传客服工单、App 评论、用户访谈纪要、NPS 开放题、业务指标表、历史 PRD 或版本复盘文件，系统会先完成解析、清洗、结构化入库和向量化，再通过 LangGraph Agent workflow 进行反馈分析、痛点聚类、机会点评估、PRD 生成和 Reviewer 质量评审。
 
-本项目不内置业务 demo 数据，不提供 Seed Demo Data 按钮。所有业务数据必须来自用户上传文件或用户在页面手动录入。LLM 不接收完整原始文件，只接收经过结构化入库、检索和上下文压缩后的相关证据。API Key 只从后端环境变量读取。
+项目不内置业务 demo 数据，不提供 Seed Demo Data 按钮。所有业务数据都来自用户上传文件或用户输入。LLM 不接收完整原始文件，只接收经过结构化入库、检索和上下文压缩后的相关证据。API Key 只从后端环境变量读取，前端不保存、不硬编码密钥。
 
-## 核心功能
+## 当前产品形态
 
-- Agent Workspace：聊天式主入口，支持当前会话上传文件、自动解析入库、运行 Agent workflow。
-- 右侧动态面板：用 Tab 展示当前文件、Agent 执行轨迹、检索证据、PRD 草稿、Reviewer 评审和 Evaluation 指标。
-- Conversation History：展示历史会话，切换后只加载该 `conversation_id` 的文件、消息和分析结果。
-- Evaluation：展示 Agent、LLM、检索证据、生成质量和上下文压缩指标，可按会话过滤。
-- 后台能力：反馈分析、痛点聚类、机会点评估、PRD 生成、Reviewer 质量评审仍保留，但不再强制作为独立页面入口。
+前端主入口是 `Agent Workspace`，目前已经收敛为单页工作台：
+
+- 左侧：可隐藏的会话历史，只展示会话名称和最后更新时间。
+- 中间：聊天输入区，支持在发送按钮旁通过加号上传文件。
+- 右侧：分析工作区，通过 Tab 展示当前会话的数据与结果。
+- 每个会话都有独立 `conversation_id`，上传文件、反馈、指标、PRD 和 Agent run 都绑定当前会话。
+- Agent 每次只分析当前 `conversation_id` 下的数据，不默认分析全库。
+
+右侧 Tab 包括：
+
+- 当前文件：展示当前会话上传文件、解析状态、入库状态和向量化状态。
+- Feedback Inbox：展示当前会话反馈列表，支持情绪下拉筛选。
+- Insight Cluster：展示痛点聚类。
+- PRD：展示历史 PRD 列表，支持切换、编辑、保存、导出 Markdown 和 DOCX。
+- Reviewer：展示综合评分、证据覆盖、问题和建议。
+- Evaluation：展示当前会话的 Agent、LLM、证据、Reviewer 和上下文压缩指标。
+
+## 核心能力
+
+- 文件上传与数据接入：支持 CSV、Excel、TXT、Markdown、DOCX。
+- Schema Detection：识别反馈字段、指标字段和文本类文件类型。
+- 结构化入库：反馈、指标、文档 chunk、Agent trace、PRD、记忆和评估数据写入 SQLite。
+- 轻量 RAG：反馈和文档 chunk 生成 embedding，写入向量检索层；Agent 运行时按当前会话检索相关证据。
+- 多 Agent workflow：Orchestrator、File Intake、Data Intake、Feedback Analyst、Retrieval、Cluster、Metric Analyst、Opportunity、Compression、PRD Writer、Reviewer。
+- 真实 LLM / Mock LLM 双模式：支持 OpenAI-compatible API；没有 Key 或调用失败时使用 mock 规则兜底。
+- Reviewer 评审：检查 PRD 完整度、证据覆盖、幻觉风险、问题和建议。
+- 历史 PRD：可以在同一会话中生成多个痛点对应的 PRD，例如“写一份针对支付体验痛点的 PRD”。
+- Evaluation：从真实运行表计算 Agent、LLM、检索、质量和压缩指标。
+- Fallback：Redis、Milvus 或真实 LLM 不可用时，系统仍可用 fallback/mock 跑完整流程。
+
+## 技术栈
+
+前端：
+
+- Next.js
+- TypeScript
+- Tailwind CSS
+- Recharts
+- lucide-react
+
+后端：
+
+- FastAPI
+- Python 3.11+
+- LangGraph
+- SQLAlchemy
+- SQLite
+- Pydantic
+- Uvicorn
+- python-docx
+
+AI 与检索：
+
+- OpenAI-compatible Chat Completions API
+- OpenAI-compatible Embeddings API
+- Mock LLM
+- Mock embedding
+- Milvus facade / in-memory fallback vector store
+- Redis optional / Python dict fallback
 
 ## 技术架构
 
 ```mermaid
 flowchart LR
-  U[User Browser] --> FE[Next.js + TypeScript + Tailwind]
-  FE --> API[FastAPI]
+  U[User Browser] --> FE[Next.js Workspace]
+  FE --> API[FastAPI API]
   API --> DB[(SQLite)]
-  API --> VS{Vector Store}
-  VS --> MILVUS[Milvus / Milvus Lite]
-  VS --> FALLBACK[In-memory fallback]
-  API --> CACHE{Redis optional}
-  CACHE --> REDIS[Redis]
-  CACHE --> MEM[Python dict fallback]
-  API --> LLM{LLM Gateway}
-  LLM --> MOCK[Mock LLM + hashlib embedding]
-  LLM --> OPENAI[OpenAI-compatible API]
-  API --> AGENT[Agent Workflow]
-  AGENT --> DB
-  AGENT --> VS
+  API --> AG[LangGraph Workflow]
+  AG --> DB
+  AG --> VS[Vector Store Facade]
+  VS --> FB[In-memory Fallback Vector Store]
+  VS -. optional .-> MILVUS[Milvus / Milvus Lite]
+  API --> REDIS{Redis Optional}
+  REDIS --> MEM[Python dict fallback]
+  AG --> LLM{LLM Gateway}
+  LLM --> REAL[OpenAI-compatible API]
+  LLM --> MOCK[Mock LLM]
+  LLM --> EMB[Real or Mock Embedding]
 ```
 
 ## Agent Workflow
+
+当前 workflow 是固定顺序为主，但 Opportunity 阶段会根据用户问题选择目标痛点或机会点。例如用户输入“写一份针对支付体验痛点的 PRD”，系统会优先选择支付相关 cluster/opportunity 生成 PRD；如果没有指定痛点，则默认选择优先级最高的机会点。
 
 ```mermaid
 flowchart TD
@@ -48,65 +103,181 @@ flowchart TD
   I --> J[Compression Node]
   J --> K[PRD Writer Agent]
   K --> L[Reviewer Agent]
-  L --> M[Human Confirmation]
-  M --> N[Long-term Memory]
+  L --> M[Final Compression]
+  M --> N[Assistant Reply + Trace + Memory]
 ```
 
-## 用户上传文件处理流程
+各节点职责：
+
+- Orchestrator：记录任务入口，维护 workflow 状态。
+- File Intake：确认当前会话上传文件和入库反馈数量。
+- Data Intake：补齐未分析反馈的标签和摘要。
+- Feedback Analyst：统计情绪、模块、严重度和问题类型。
+- Retrieval：按用户任务从当前会话向量数据中召回相关反馈。
+- Cluster：按模块、标签和规则生成痛点聚类。
+- Metric Analyst：读取指标数据并生成趋势摘要。
+- Opportunity：把 cluster 转换为机会点，并按用户问题匹配目标机会点。
+- Compression：压缩检索证据和 Agent step 摘要。
+- PRD Writer：生成九章节 PRD 草稿。
+- Reviewer：输出评分、证据覆盖、问题和建议。
+- Final Compression：生成最终聊天回复，并记录项目记忆。
+
+## 文件上传处理流程
 
 ```mermaid
 flowchart TD
-  A[Upload File] --> B[Save to uploads/]
-  B --> C[Detect file type]
-  C --> D[Schema Detection]
-  D --> E[User confirms mapping]
-  E --> F[Clean and normalize]
-  F --> G[(SQLite)]
-  G --> H[Mock/real embedding]
-  H --> I[Milvus or fallback vector store]
-  I --> J[Agent retrieves evidence]
-  J --> K[Context Compression]
-  K --> L[LLM receives compressed evidence only]
+  A[Upload in current conversation] --> B[Save to backend/uploads]
+  B --> C[uploaded_files]
+  C --> D[Parse file]
+  D --> E[Detect schema or text type]
+  E --> F[Confirm schema mapping]
+  F --> G[Ingest]
+  G --> H[(SQLite structured tables)]
+  H --> I[Generate embedding]
+  I --> J[Vector store / fallback]
+  J --> K[Retrieval Agent]
+  K --> L[Context Compression]
+  L --> M[LLM receives compressed evidence]
 ```
 
-## 数据库说明
+### CSV / Excel
 
-SQLite 存结构化业务数据、PRD、Agent trace、长期记忆和评估数据。核心表包括：
+如果识别为反馈类数据：
 
-- `projects`, `uploaded_files`, `data_sources`
+- 每一行写入 `feedback_items`
+- 调用 Feedback Analyst 生成 `sentiment_label`、`severity_label`、`product_module`、`issue_type`、`feedback_summary`
+- 反馈文本和摘要生成 embedding
+- 写入向量检索层
+
+如果识别为指标类数据：
+
+- 每一行写入 `metric_snapshots`
+- 识别日期、指标名、指标值、维度名和维度值
+- 默认不向量化
+- Metric Analyst 读取指标并生成趋势摘要
+
+### TXT / Markdown / DOCX
+
+文本类文件会：
+
+- 读取文本
+- 分段 chunk
+- 写入 `document_chunks`
+- 对 chunk 生成 embedding
+- 写入向量检索层
+- 命中反馈特征的文本片段会额外进入 `feedback_items`
+
+## RAG 设计
+
+本项目使用轻量 RAG：
+
+```text
+上传文件
+→ 解析、清洗、入库
+→ 文本生成 embedding
+→ 写入 vector store
+→ 用户提问时按 conversation_id 检索相关反馈
+→ 压缩 evidence_summary
+→ PRD Writer / Reviewer 使用压缩后的证据与结构化数据
+```
+
+检索入口在 `Retrieval Agent` 中，按 `project_id` 和 `conversation_id` 过滤，避免跨会话混用数据。每次检索都会写入 `retrieval_logs`。
+
+当前实现优先保证本地可运行：`VectorClient` 提供统一 facade，实际运行时有 in-memory fallback vector store。`MILVUS_LITE_PATH` 保留为 Milvus Lite 配置入口，后续可替换为真正的 Milvus client。
+
+## LLM 与 Mock 模式
+
+环境变量：
+
+```env
+OPENAI_API_KEY=
+OPENAI_BASE_URL=
+OPENAI_MODEL=
+EMBEDDING_MODEL=
+USE_MOCK_LLM=false
+```
+
+规则：
+
+- `USE_MOCK_LLM=false` 且存在可用 API Key 时，调用真实 OpenAI-compatible API。
+- `USE_MOCK_LLM=true` 或没有 API Key 时，使用 Mock LLM。
+- 真实 LLM 调用失败时，自动 fallback 到 Mock LLM。
+- Embedding 也支持真实 / mock 双模式。
+- Mock embedding 基于 hashlib 生成稳定向量，保证本地检索流程可运行。
+- 所有 LLM 调用写入 `llm_calls`，记录 token、耗时、模型、成功状态、JSON 解析状态和成本估算。
+
+Mock LLM 不使用内置业务 demo 数据，只基于上传后入库的数据、用户任务和 SQLite 中已有数据工作。
+
+模块识别的 mock 规则包括：
+
+- 支付 / 验证码 / 付款 / 退款 / 扣费 → 支付
+- AI / 回复 / 答非所问 / 机器人 / 模型 → AI 回复
+- 新手 / 引导 / 不会用 / 教程 → 新手引导
+- 卡 / 慢 / 加载 / 闪退 / 崩溃 → 性能
+- 会员 / 权益 / 收费 / 订阅 → 会员
+- 搜索 / 找不到 / 模板 → 搜索
+- 登录 / 注册 / 密码 / 账号 → 登录
+
+## SQLite 数据说明
+
+SQLite 存储结构化业务数据、PRD、Agent trace、长期记忆和评估数据。
+
+核心表：
+
+- `projects`
+- `conversations`, `conversation_messages`
+- `uploaded_files`, `data_sources`
 - `feedback_items`, `metric_snapshots`, `document_chunks`
 - `insight_clusters`, `opportunities`, `prd_documents`
 - `agent_runs`, `agent_steps`
 - `project_memory`, `user_preference_memory`, `decision_memory`
 - `llm_calls`, `retrieval_logs`, `compression_logs`, `evaluation_results`
 
-`uploads/` 是用户上传文件目录。`storage/exports/` 是导出文件目录。`storage/prds/` 可用于保存 PRD 导出文件。
+目录说明：
 
-## Milvus / Redis
+- `backend/uploads/`：用户上传文件目录。
+- `backend/storage/exports/`：导出文件目录，例如 DOCX。
+- `backend/storage/prds/`：PRD 存储目录预留。
+- `backend/storage/feedbackos.db`：默认 SQLite 数据库。
 
-Milvus 存用户反馈、文档片段、PRD 片段 embedding，用于相似反馈召回和证据追溯。本地运行时系统优先尝试向量能力，但 Milvus 不可用时会自动使用内存 fallback vector store，API 不会崩。
+## 记忆设计
 
-Redis 是可选增强，用于：
+短期记忆在 LangGraph `AgentState` 中，字段包括：
 
-- `agent_run:{run_id}:progress`
-- `llm_cache:{hash}`
-- `session_state:{session_id}`
+- `task`
+- `conversation_id`
+- `messages`
+- `conversation_summary`
+- `retrieved_feedback`
+- `evidence_summary`
+- `metric_summary`
+- `draft_prd`
+- `reviewer_result`
+- `final_output`
 
-Redis 不可用时系统 fallback 到 Python dict。
+长期记忆放 SQLite，不放 Redis。
 
-## 记忆与上下文压缩
+当前策略：
 
-LangGraph 负责任务编排、短期记忆、节点状态流转和人工确认节点。短期记忆保存在 `AgentState` 中，包括任务、消息、检索证据、证据摘要、指标摘要、PRD 草稿、Reviewer 结果等。
+- `project_memory`：Agent run 结束后自动写入并自动确认，`confirmed_by_user=True`。
+- `decision_memory`：用于保存人工决策记录，仍保留确认字段。
+- `user_preference_memory`：用于保存用户偏好，仍保留确认字段。
 
-长期记忆保存在 SQLite，不放 Redis。`project_memory`、`decision_memory`、`user_preference_memory` 写入前必须经过人工确认。
+Redis 只作为可选增强，不作为长期记忆存储。
 
-Context Compression 压缩三类上下文：
+## Context Compression
 
-- conversation_summary：多轮对话历史摘要
-- evidence_summary：Milvus/fallback 召回证据摘要
-- step_summary：Agent 中间结果摘要
+上下文压缩用于减少 LLM 输入噪音，不把完整文件或完整历史直接给模型。
 
-压缩日志写入 `compression_logs`，压缩率公式为：
+压缩类型：
+
+- `conversation_summary`：多轮对话摘要。
+- `evidence_summary`：检索证据摘要。
+- `step_summary`：Agent 中间结果摘要。
+
+压缩日志写入 `compression_logs`。
+
+压缩率公式：
 
 ```text
 context_compression_rate = 1 - compressed_tokens / original_tokens
@@ -114,15 +285,112 @@ context_compression_rate = 1 - compressed_tokens / original_tokens
 
 ## Evaluation / Observability
 
-Evaluation 页面从真实运行表计算指标：
+Evaluation 指标从真实运行表计算，当前右侧 Workspace 面板上方以 3 × 3 卡片展示：
 
-- Agent：运行总次数、成功率、平均 Step 数、工具调用数
-- LLM：调用次数、平均延迟、输入/输出 token、预估成本、缓存命中率、JSON 解析成功率
-- Retrieval：检索次数、平均 Top-K 返回数、平均相似度、无结果率、机会点证据覆盖率
-- Quality：PRD 完整度、Reviewer 平均分、幻觉风险分布、人工确认比例
-- Compression：各类压缩次数、平均压缩前/后 token、平均压缩率
+- Agent Run 总次数
+- Agent Run 成功率
+- 平均 Step 数
+- LLM 调用次数
+- 输入 Token
+- 输出 Token
+- 证据覆盖率
+- Reviewer 平均分
+- 平均压缩率
 
-## 本地运行步骤
+更多明细区域展示：
+
+- 生成质量图表
+- LLM 调用 JSON
+- 检索与证据 JSON
+- 上下文压缩 JSON
+
+关键计算逻辑：
+
+- 平均 Step 数 = `agent_steps` 总数 / `agent_runs` 总数。
+- 证据覆盖率 = 有 `evidence_ids` 的机会点数量 / 机会点总数。
+- Reviewer 平均分 = `Reviewer Agent` step 输出的 `quality_score` 平均值。
+- 平均压缩率 = `compression_logs.compression_rate` 平均值。
+
+## PRD 生成与 Reviewer
+
+PRD Writer 生成固定九章节 Markdown：
+
+1. 背景与问题
+2. 目标用户
+3. 用户故事
+4. 需求范围
+5. 功能流程
+6. 验收标准
+7. 埋点指标
+8. 风险点
+9. 后续迭代建议
+
+PRD 正文不包含“证据引用”章节，也不展示 evidence id。证据用于约束生成和 Reviewer 评审，不直接暴露为 PRD 章节。
+
+Reviewer 输出：
+
+- `quality_score`
+- `prd_completeness_score`
+- `evidence_coverage_score`
+- `problems`
+- `suggestions`
+- `hallucination_risk`
+- `need_human_review`
+
+前端 Reviewer 面板目前展示综合评分、证据覆盖、问题和建议。
+
+## API 概览
+
+健康检查：
+
+- `GET /health`
+
+会话：
+
+- `POST /api/conversations`
+- `GET /api/conversations`
+- `GET /api/conversations/{conversation_id}`
+- `GET /api/conversations/{conversation_id}/workspace`
+
+上传：
+
+- `POST /api/upload?conversation_id=...`
+- `GET /api/upload/files?conversation_id=...`
+- `GET /api/upload/files/{file_id}`
+- `POST /api/upload/files/{file_id}/parse`
+- `POST /api/upload/files/{file_id}/confirm-schema`
+- `POST /api/upload/files/{file_id}/ingest`
+
+Agent：
+
+- `POST /api/agent/run`
+- `GET /api/agent/runs/{run_id}`
+- `GET /api/agent/runs/{run_id}/steps`
+
+业务结果：
+
+- `GET /api/feedback`
+- `POST /api/clusters/generate`
+- `GET /api/clusters`
+- `POST /api/opportunities/generate`
+- `GET /api/opportunities`
+- `POST /api/prd/generate`
+- `GET /api/prd/{prd_id}`
+- `POST /api/prd/{prd_id}/review`
+- `POST /api/prd/{prd_id}/update`
+- `POST /api/prd/export-docx`
+
+记忆与评估：
+
+- `GET /api/memory`
+- `POST /api/memory/confirm`
+- `GET /api/evaluation/overview`
+- `GET /api/evaluation/llm`
+- `GET /api/evaluation/retrieval`
+- `GET /api/evaluation/compression`
+- `GET /api/evaluation/quality`
+
+## 本地运行
 
 后端：
 
@@ -130,8 +398,14 @@ Evaluation 页面从真实运行表计算指标：
 cd backend
 python -m venv .venv
 .venv\Scripts\activate
-pip install -e .
+pip install -r requirements.txt
 uvicorn app.main:app --reload
+```
+
+如果希望使用 editable install，也可以运行：
+
+```bash
+pip install -e .
 ```
 
 前端：
@@ -142,41 +416,91 @@ npm install
 npm run dev
 ```
 
-打开 `http://localhost:3000`，默认进入 Agent Workspace。后端健康检查为 `http://localhost:8000/health`。
+打开：
+
+```text
+http://localhost:3000
+```
+
+健康检查：
+
+```text
+http://localhost:8000/health
+```
 
 ## 环境变量
 
-复制 `.env.example` 为 `.env`，按需配置：
+复制 `.env.example` 为 `.env`，放在项目根目录。
 
-```text
+示例：
+
+```env
 OPENAI_API_KEY=
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
-EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+OPENAI_MODEL=qwen-plus
+EMBEDDING_MODEL=text-embedding-v4
 USE_MOCK_LLM=false
+
 DATABASE_URL=sqlite:///./storage/feedbackos.db
 REDIS_URL=redis://localhost:6379/0
 MILVUS_LITE_PATH=./storage/milvus_lite.db
 FRONTEND_ORIGIN=http://localhost:3000
 ```
 
-默认优先调用真实 OpenAI-compatible 模型。没有真实 API Key 或显式设置 `USE_MOCK_LLM=true` 时，系统使用 Mock LLM 与 mock embedding。Mock LLM 用于本地开发、演示兜底和流程回归测试，结果只基于上传解析后的反馈、指标、文档片段、用户任务和 SQLite 已有数据。
+如果使用阿里云百炼 DashScope OpenAI 兼容模式：
 
-有真实 API Key 时，将 `USE_MOCK_LLM=false` 即可调用 OpenAI 兼容 API。
+- `OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`
+- `OPENAI_MODEL=qwen-plus` 或其他百炼模型名
+- `EMBEDDING_MODEL=text-embedding-v4`
+- `OPENAI_API_KEY` 或 `DASHSCOPE_API_KEY` 配置为百炼 Key
 
-如果你使用 DashScope 兼容模式，也可以只配置 `DASHSCOPE_API_KEY`；未显式配置 `OPENAI_BASE_URL` 时，后端会自动使用 `https://dashscope.aliyuncs.com/compatible-mode/v1`。Anthropic 原生 API 不属于 OpenAI-compatible 接口，本项目当前不会直接用 `ANTHROPIC_API_KEY` 调用。
+如果没有真实 API Key：
 
-## 文件上传格式
+```env
+USE_MOCK_LLM=true
+```
 
-- 反馈类 CSV / Excel：包含反馈、评论、内容、建议等文本列。系统会识别 `feedback_text`、`event_time`、`channel`、`user_segment` 等字段。
-- 指标类 CSV / Excel：包含指标名、指标值、日期、维度等字段。系统写入 `metric_snapshots`，默认不向量化。
-- TXT / MD / DOCX：系统读取文本并分段 chunk，写入 `document_chunks`，相关反馈片段可进入 `feedback_items`，chunk 会生成 embedding。
+系统会使用 Mock LLM 和 mock embedding 跑完整流程。
 
 ## 如何测试系统效果
 
-1. 端到端 Agent workflow 测试：上传自己的反馈文件，解析、确认、入库后在 Agent Console 运行任务，检查 Timeline 是否覆盖 Orchestrator 到 Compression。
-2. 分类准确率测试：准备一份带人工标签的反馈文件，对比 `feedback_items` 中情绪、模块、严重度字段。
-3. 检索 Top-K 可用率测试：在 Agent Console 输入专题问题，检查 `retrieval_logs` 与召回证据是否相关。
-4. PRD 完整度测试：生成 PRD 后检查是否包含背景与问题、目标用户、用户故事、需求范围、功能流程、验收标准、埋点指标、风险点和后续迭代建议。
-5. Reviewer 拦截率测试：对缺少验收标准、指标设计或风险说明的 PRD 调用 Reviewer，检查 problems、suggestions、hallucination_risk。
-6. 上下文压缩率测试：运行多步 Agent 后查看 Evaluation 的平均上下文压缩率和 `compression_logs`。
+1. 端到端 Agent workflow 测试  
+   在 Workspace 上传自己的反馈文件，等待解析、入库和向量化完成后，输入“分析当前反馈并生成 Top 机会点和 PRD”。检查右侧 PRD、Reviewer、Evaluation 是否更新。
+
+2. 指定痛点 PRD 测试  
+   输入“写一份针对支付体验痛点的 PRD”或“写一份针对 AI 回复体验痛点的 PRD”。检查 PRD 历史列表是否生成不同主题的 PRD。
+
+3. 分类准确率测试  
+   准备带人工标签的反馈文件，对比 `feedback_items` 中的情绪、模块、严重度和问题类型。
+
+4. 检索 Top-K 可用率测试  
+   输入专题问题，查看 `retrieval_logs` 和右侧结果是否与问题相关。
+
+5. PRD 完整度测试  
+   检查生成 PRD 是否包含九个固定章节，并确认没有“证据引用”章节。
+
+6. Reviewer 拦截测试  
+   生成 PRD 后查看 Reviewer 面板，确认 problems、suggestions、quality_score 和 evidence_coverage_score 是否合理。
+
+7. 上下文压缩率测试  
+   多次运行 Agent 后，在 Evaluation 面板查看平均压缩率，并可在 `compression_logs` 中查看原始 token、压缩后 token 和 compression rate。
+
+## 部署建议
+
+本地演示可以使用 SQLite。正式部署建议：
+
+- 数据库从 SQLite 迁移到 PostgreSQL。
+- 上传文件使用持久化 volume、S3、OSS 或 MinIO。
+- 后端使用 Gunicorn + Uvicorn worker 或 Docker。
+- 前端使用 `npm run build && npm run start`，或部署到支持 Next.js 的平台。
+- 使用 Nginx/Caddy 做 HTTPS 和反向代理。
+- Redis 和 Milvus 作为可选增强服务部署。
+- 增加用户登录后，需要给 `projects`、`conversations`、`uploaded_files`、`feedback_items`、`prd_documents`、`agent_runs` 等表加用户归属或严格的 project ownership 校验。
+
+## 项目边界
+
+- 当前项目是本地可运行、可演示的 AI 产品经理实习项目展示系统。
+- 当前没有内置业务 demo 数据。
+- 当前没有真正的多用户登录和权限隔离。
+- 当前 Milvus 以 facade + fallback 为主，便于本地稳定运行。
+- 当前 workflow 是固定顺序为主，Opportunity 阶段支持根据用户问题选择具体痛点。
