@@ -60,7 +60,7 @@ def compression_metrics(db: Session):
 
 def quality_metrics(db: Session, project_id: int = 1):
     prds = db.query(PrdDocument).filter_by(project_id=project_id).all()
-    required = ["背景与问题", "目标用户", "用户故事", "需求范围", "功能流程", "验收标准", "埋点指标", "风险点", "证据引用"]
+    required = ["背景与问题", "目标用户", "用户故事", "需求范围", "功能流程", "验收标准", "埋点指标", "风险点", "后续迭代建议"]
     scores = [sum(1 for item in required if item in p.prd_markdown) / len(required) * 100 for p in prds]
     reviews = db.query(AgentStep).filter(AgentStep.agent_name == "Reviewer Agent").all()
     review_scores = []
@@ -83,4 +83,3 @@ def quality_metrics(db: Session, project_id: int = 1):
         "human_review_rate": round(human / len(reviews), 3) if reviews else 0,
         "reviewer_blocked_problem_count": problems,
     }
-

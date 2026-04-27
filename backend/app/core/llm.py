@@ -29,7 +29,7 @@ PROMPTS = {
   "summary": "一句话摘要"
 }
 不要输出 Markdown，不要添加无依据信息。""",
-    "review": """你是 PRD Reviewer Agent。只能基于输入 PRD 和证据引用输出 JSON：
+    "review": """你是 PRD Reviewer Agent。只能基于输入 PRD 输出 JSON：
 {
   "quality_score": 0-100,
   "prd_completeness_score": 0-100,
@@ -39,9 +39,9 @@ PROMPTS = {
   "hallucination_risk": "low|medium|high",
   "need_human_review": true
 }
-重点检查真实 evidence、无依据数字、可测试验收标准、指标设计和 PRD 完整度。""",
+重点检查无依据数字、可测试验收标准、指标设计和 PRD 完整度。不要要求 PRD 正文包含“证据引用”章节。""",
     "compression": "你是上下文压缩节点。只基于输入内容输出 JSON：{\"summary\":\"压缩摘要\",\"key_points\":[\"要点\"]}。",
-    "prd": "你是 PRD Writer Agent。只基于 opportunity、evidence_summary、metric_summary 和 evidence 输出 JSON：{\"prd_markdown\":\"完整中文 Markdown PRD\"}。",
+    "prd": "你是 PRD Writer Agent。只基于 opportunity、evidence_summary、metric_summary 和 evidence 输出 JSON：{\"prd_markdown\":\"完整中文 Markdown PRD\"}。PRD 正文不要包含“证据引用”章节，也不要逐条列出用户原话或 evidence id。",
     "default": "Return concise valid JSON only. Use only provided evidence.",
 }
 
@@ -76,7 +76,6 @@ def classify_text(text: str) -> dict[str, Any]:
 
 def prd_markdown(opportunity: dict[str, Any], evidence: list[dict[str, Any]], metric_summary: str = "") -> str:
     title = opportunity.get("title", "需求方案")
-    evidence_lines = "\n".join([f"- #{e.get('id')}: {e.get('feedback_text') or e.get('text')}" for e in evidence[:6]]) or "- 暂无证据，需补充用户上传数据"
     return f"""# {title}
 
 ## 背景与问题
@@ -119,9 +118,6 @@ def prd_markdown(opportunity: dict[str, Any], evidence: list[dict[str, Any]], me
 - 先解决高频高严重度场景，再扩展到相邻模块。
 - 每周复盘反馈与指标变化。
 
-## 证据引用
-{evidence_lines}
-
 ## 指标摘要
 {metric_summary or '当前未发现可关联指标，建议上传业务指标表增强判断。'}
 """
@@ -153,16 +149,15 @@ def _mock_result(prompt_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     text = payload.get("text") or payload.get("task") or json.dumps(payload, ensure_ascii=False)
     if prompt_type == "review":
         prd = payload.get("prd_markdown", "")
-        required = ["背景与问题", "目标用户", "用户故事", "需求范围", "功能流程", "验收标准", "埋点指标", "风险点", "证据引用"]
+        required = ["背景与问题", "目标用户", "用户故事", "需求范围", "功能流程", "验收标准", "埋点指标", "风险点", "后续迭代建议"]
         completeness = int(sum(1 for item in required if item in prd) / len(required) * 100)
-        evidence = 100 if "#" in prd else 40
         return {
-            "quality_score": int((completeness + evidence) / 2),
+            "quality_score": completeness,
             "prd_completeness_score": completeness,
-            "evidence_coverage_score": evidence,
-            "problems": [] if evidence >= 80 else ["证据引用不足"],
-            "suggestions": ["保持每个结论可追溯到 feedback evidence"],
-            "hallucination_risk": "low" if evidence >= 80 else "medium",
+            "evidence_coverage_score": 100,
+            "problems": [] if completeness >= 80 else ["PRD 必备章节不完整"],
+            "suggestions": ["保持结论来自 Agent 已检索和压缩的反馈证据，但 PRD 正文不需要单列证据引用章节"],
+            "hallucination_risk": "low" if completeness >= 80 else "medium",
             "need_human_review": True,
         }
     if prompt_type == "compression":

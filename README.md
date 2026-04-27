@@ -180,6 +180,6 @@ FRONTEND_ORIGIN=http://localhost:3000
 1. 端到端 Agent workflow 测试：上传自己的反馈文件，解析、确认、入库后在 Agent Console 运行任务，检查 Timeline 是否覆盖 Orchestrator 到 Compression。
 2. 分类准确率测试：准备一份带人工标签的反馈文件，对比 `feedback_items` 中情绪、模块、严重度字段。
 3. 检索 Top-K 可用率测试：在 Agent Console 输入专题问题，检查 `retrieval_logs` 与召回证据是否相关。
-4. PRD 完整度测试：生成 PRD 后检查是否包含背景与问题、目标用户、用户故事、需求范围、功能流程、验收标准、埋点指标、风险点和证据引用。
-5. Reviewer 拦截率测试：对缺少证据引用或验收标准的 PRD 调用 Reviewer，检查 problems、suggestions、hallucination_risk。
+4. PRD 完整度测试：生成 PRD 后检查是否包含背景与问题、目标用户、用户故事、需求范围、功能流程、验收标准、埋点指标、风险点和后续迭代建议。
+5. Reviewer 拦截率测试：对缺少验收标准、指标设计或风险说明的 PRD 调用 Reviewer，检查 problems、suggestions、hallucination_risk。
 6. 上下文压缩率测试：运行多步 Agent 后查看 Evaluation 的平均上下文压缩率和 `compression_logs`。
