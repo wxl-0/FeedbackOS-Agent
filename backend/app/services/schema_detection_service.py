@@ -2,6 +2,21 @@ from typing import Any
 
 
 TEXT_KEYS = ["feedback", "content", "comment", "review", "text", "问题", "反馈", "评论", "内容", "建议", "原文"]
+TEXT_EXCLUDE_KEYS = ["id", "_id", "uuid", "编号", "序号", "project_id"]
+EXACT_TEXT_COLUMNS = [
+    "feedback_text",
+    "comment_text",
+    "review_text",
+    "content",
+    "comment",
+    "review",
+    "text",
+    "用户反馈",
+    "反馈内容",
+    "评论内容",
+    "反馈原文",
+    "原文",
+]
 DATE_KEYS = ["date", "time", "日期", "时间", "event"]
 METRIC_KEYS = ["dau", "留存", "转化", "退款", "成功率", "工单", "满意度", "metric", "指标", "value", "数值"]
 
@@ -19,8 +34,17 @@ def detect_schema(columns: list[str], sample_rows: list[dict[str, Any]]) -> dict
         "dimension_name": None,
         "dimension_value": None,
     }
+    for preferred in EXACT_TEXT_COLUMNS:
+        for col, low in lower.items():
+            if low == preferred.lower() or col == preferred:
+                mapping["feedback_text"] = col
+                break
+        if mapping["feedback_text"]:
+            break
+
     for col, low in lower.items():
-        if not mapping["feedback_text"] and any(k in low or k in col for k in TEXT_KEYS):
+        is_identifier = low in TEXT_EXCLUDE_KEYS or low.endswith("_id") or low.endswith("id") or "编号" in col
+        if not mapping["feedback_text"] and not is_identifier and any(k in low or k in col for k in TEXT_KEYS):
             mapping["feedback_text"] = col
         if not mapping["event_time"] and any(k in low or k in col for k in DATE_KEYS):
             mapping["event_time"] = col
@@ -47,7 +71,8 @@ def detect_schema(columns: list[str], sample_rows: list[dict[str, Any]]) -> dict
     if not mapping["metric_value"] and numeric_cols:
         mapping["metric_value"] = numeric_cols[0]
     if not mapping["feedback_text"] and columns:
-        longest = max(columns, key=lambda c: sum(len(str(r.get(c, ""))) for r in sample_rows[:20]))
+        candidates = [c for c in columns if not c.lower().endswith("id") and c.lower() not in TEXT_EXCLUDE_KEYS]
+        longest = max(candidates or columns, key=lambda c: sum(len(str(r.get(c, ""))) for r in sample_rows[:20]))
         mapping["feedback_text"] = longest
     metric_hits = sum(1 for c in columns if any(k in c.lower() or k in c for k in METRIC_KEYS))
     data_type = "metric_data" if metric_hits >= 2 or (mapping["metric_value"] and mapping["metric_name"]) else "feedback_data"
@@ -61,4 +86,3 @@ def detect_text_type(file_name: str, text: str) -> str:
     if "复盘" in text[:1000] or "会议" in text[:1000] or "访谈" in text[:1000]:
         return "interview_note"
     return "interview_note"
-

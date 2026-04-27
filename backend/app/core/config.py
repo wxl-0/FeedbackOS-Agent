@@ -22,6 +22,8 @@ class Settings(BaseSettings):
 
     @property
     def llm_api_key(self) -> str | None:
+        if os.getenv("DASHSCOPE_API_KEY") and not os.getenv("OPENAI_BASE_URL"):
+            return os.getenv("DASHSCOPE_API_KEY")
         return (
             self.openai_api_key
             or os.getenv("OPENAI_API_KEY")
@@ -34,7 +36,7 @@ class Settings(BaseSettings):
     def resolved_base_url(self) -> str:
         if os.getenv("OPENAI_BASE_URL"):
             return self.openai_base_url
-        if os.getenv("DASHSCOPE_API_KEY") and not os.getenv("OPENAI_API_KEY"):
+        if os.getenv("DASHSCOPE_API_KEY"):
             return "https://dashscope.aliyuncs.com/compatible-mode/v1"
         if os.getenv("DEEPSEEK_API_KEY") and not os.getenv("OPENAI_API_KEY"):
             return "https://api.deepseek.com/v1"
@@ -44,7 +46,7 @@ class Settings(BaseSettings):
     def resolved_model(self) -> str:
         if os.getenv("OPENAI_MODEL"):
             return self.openai_model
-        if os.getenv("DASHSCOPE_API_KEY") and not os.getenv("OPENAI_API_KEY"):
+        if os.getenv("DASHSCOPE_API_KEY"):
             return "qwen-plus"
         if os.getenv("DEEPSEEK_API_KEY") and not os.getenv("OPENAI_API_KEY"):
             return "deepseek-chat"
@@ -54,7 +56,7 @@ class Settings(BaseSettings):
     def resolved_embedding_model(self) -> str:
         if os.getenv("EMBEDDING_MODEL"):
             return self.embedding_model
-        if os.getenv("DASHSCOPE_API_KEY") and not os.getenv("OPENAI_API_KEY"):
+        if os.getenv("DASHSCOPE_API_KEY"):
             return "text-embedding-v4"
         return self.embedding_model
 

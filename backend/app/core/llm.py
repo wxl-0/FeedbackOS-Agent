@@ -56,10 +56,14 @@ def classify_text(text: str) -> dict[str, Any]:
         if any(word.lower() in text.lower() for word in words):
             module = name
             break
-    negative_words = ["差", "慢", "失败", "不能", "无法", "崩溃", "投诉", "退款", "答非所问", "卡"]
+    negative_words = [
+        "差", "慢", "失败", "不能", "无法", "崩溃", "投诉", "退款", "答非所问", "卡",
+        "收不到", "放弃", "找不到", "无关", "不准", "不好", "不清楚", "忘记", "过期",
+        "不太", "没有结果", "扣费", "闪退", "报错", "卡住", "加载"
+    ]
     positive_words = ["好", "喜欢", "满意", "顺畅", "方便"]
     sentiment = "negative" if any(w in text for w in negative_words) else "positive" if any(w in text for w in positive_words) else "neutral"
-    severity = "high" if any(w in text for w in ["崩溃", "退款", "失败", "无法", "投诉"]) else "medium" if sentiment == "negative" else "low"
+    severity = "high" if any(w in text for w in ["崩溃", "退款", "失败", "无法", "投诉", "放弃购买"]) else "medium" if sentiment == "negative" else "low"
     issue_type = "Bug" if any(w in text for w in ["崩溃", "闪退", "报错", "失败"]) else "新需求" if any(w in text for w in ["希望", "想要", "建议", "能否"]) else "投诉" if sentiment == "negative" else "咨询"
     return {
         "sentiment": sentiment,
