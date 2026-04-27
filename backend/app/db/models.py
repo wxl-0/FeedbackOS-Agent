@@ -203,7 +203,7 @@ class ProjectMemory(Base):
     memory_type: Mapped[str] = mapped_column(String(80))
     content_json: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(String(120))
-    confirmed_by_user: Mapped[bool] = mapped_column(Boolean, default=False)
+    confirmed_by_user: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 

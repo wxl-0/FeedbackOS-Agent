@@ -5,11 +5,21 @@ import { Bot, ChevronLeft, ChevronRight, Download, FileText, Loader2, Plus, Save
 import { EvaluationChart } from "@/components/charts/evaluation-chart";
 import { api } from "@/lib/api";
 
-const tabs = ["当前文件", "Feedback Inbox", "Insight Cluster", "PRD", "Evaluation"] as const;
+const tabs = ["当前文件", "Feedback Inbox", "Insight Cluster", "PRD", "Reviewer", "Evaluation"] as const;
 type Tab = (typeof tabs)[number];
 
 function pct(value: number | undefined) {
   return `${Math.round((value || 0) * 100)}%`;
+}
+
+function formatTime(value?: string) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 export default function WorkspacePage() {
@@ -69,7 +79,7 @@ export default function WorkspacePage() {
 
   async function ensureCurrentConversation() {
     if (conversation?.id) return conversation;
-    const created = await api.createConversation("需求发现会话");
+    const created = await api.createConversation(`需求发现 ${formatTime(new Date().toISOString())}`);
     window.localStorage.setItem("feedbackos.currentConversationId", created.id);
     setConversation(created);
     return created;
@@ -128,8 +138,7 @@ export default function WorkspacePage() {
                 className={`w-full rounded-md border p-3 text-left text-sm hover:bg-slate-50 ${conversation?.id === row.id ? "border-brand bg-[#e9f3f2]" : "border-line bg-white"}`}
               >
                 <div className="truncate font-medium">{row.title}</div>
-                <div className="mt-1 truncate text-xs text-muted">{row.id}</div>
-                <div className="mt-2 text-xs text-muted">{row.message_count} messages · {row.file_count || 0} files</div>
+                <div className="mt-2 text-xs text-muted">最后更新 {formatTime(row.updated_at)}</div>
               </button>
             ))}
           </div>
@@ -175,6 +184,7 @@ export default function WorkspacePage() {
           {activeTab === "Feedback Inbox" && <FeedbackPanel items={workspace?.feedback || []} />}
           {activeTab === "Insight Cluster" && <ClusterPanel clusters={workspace?.clusters || []} />}
           {activeTab === "PRD" && <PrdPanel prds={workspace?.prds || []} reviewer={workspace?.reviewer_result} onSaved={() => conversation?.id && load(conversation.id)} />}
+          {activeTab === "Reviewer" && <ReviewerPanel reviewer={workspace?.reviewer_result} />}
           {activeTab === "Evaluation" && <EvaluationPanel data={workspace?.evaluation} />}
         </div>
       </aside>
@@ -307,6 +317,40 @@ function PrdPanel({ prds, reviewer, onSaved }: { prds: any[]; reviewer?: any; on
   </div>;
 }
 
+function ReviewerPanel({ reviewer }: { reviewer?: any }) {
+  if (!reviewer) return <p className="text-sm text-muted">当前会话还没有 Reviewer 评审结果。生成 PRD 后会在这里展示质量评分、问题和建议。</p>;
+  const scoreCards = [
+    ["综合评分", reviewer.quality_score ?? 0],
+    ["证据覆盖", reviewer.evidence_coverage_score ?? 0],
+  ];
+  return <div className="space-y-4">
+    <div className="grid grid-cols-2 gap-3">
+      {scoreCards.map(([label, value]) => (
+        <div key={String(label)} className="rounded-md border border-line bg-white p-3">
+          <div className="text-xs text-muted">{label}</div>
+          <div className="mt-1 text-xl font-semibold">{value}</div>
+        </div>
+      ))}
+    </div>
+    <section className="rounded-md border border-line bg-white p-4">
+      <h3 className="text-sm font-semibold">发现的问题</h3>
+      {(reviewer.problems || []).length ? (
+        <ul className="mt-3 space-y-2 text-sm text-muted">
+          {reviewer.problems.map((item: string, index: number) => <li key={index}>• {item}</li>)}
+        </ul>
+      ) : <p className="mt-3 text-sm text-muted">暂无明显问题。</p>}
+    </section>
+    <section className="rounded-md border border-line bg-white p-4">
+      <h3 className="text-sm font-semibold">优化建议</h3>
+      {(reviewer.suggestions || []).length ? (
+        <ul className="mt-3 space-y-2 text-sm text-muted">
+          {reviewer.suggestions.map((item: string, index: number) => <li key={index}>• {item}</li>)}
+        </ul>
+      ) : <p className="mt-3 text-sm text-muted">暂无建议。</p>}
+    </section>
+  </div>;
+}
+
 function EvaluationPanel({ data }: { data?: any }) {
   if (!data) return <p className="text-sm text-muted">当前会话暂无 Evaluation 指标。</p>;
   const cards = [
@@ -316,16 +360,13 @@ function EvaluationPanel({ data }: { data?: any }) {
     ["LLM 调用次数", data.llm?.llm_call_count],
     ["输入 Token", data.llm?.input_tokens],
     ["输出 Token", data.llm?.output_tokens],
-    ["检索次数", data.retrieval?.retrieval_count],
     ["证据覆盖率", pct(data.retrieval?.opportunity_evidence_coverage)],
-    ["PRD 完整度", data.quality?.prd_completeness_avg],
     ["Reviewer 平均分", data.quality?.reviewer_avg_score],
-    ["人工确认比例", pct(data.quality?.human_review_rate)],
     ["平均压缩率", pct(data.compression?.avg_compression_rate)],
   ];
 
   return <div className="space-y-4">
-    <div className="grid grid-cols-4 gap-3">
+    <div className="grid grid-cols-3 gap-3">
       {cards.map(([label, value]) => (
         <div key={String(label)} className="rounded-md border border-line bg-white p-3">
           <div className="text-xs text-muted">{label}</div>

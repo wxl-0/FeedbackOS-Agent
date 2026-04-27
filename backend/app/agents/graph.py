@@ -236,7 +236,7 @@ async def run_agent_workflow(db: Session, task: str, project_id: int = 1, user_i
     app = graph.compile()
     try:
         state = await app.ainvoke(initial)
-        db.add(ProjectMemory(project_id=project_id, conversation_id=conversation_id, memory_type="pending_agent_finding", content_json=json.dumps({"summary": state["final_output"], "run_id": run.id}, ensure_ascii=False), source="agent_run", confirmed_by_user=False))
+        db.add(ProjectMemory(project_id=project_id, conversation_id=conversation_id, memory_type="agent_finding", content_json=json.dumps({"summary": state["final_output"], "run_id": run.id}, ensure_ascii=False), source="agent_run", confirmed_by_user=True))
         if conversation_id:
             db.add(ConversationMessage(conversation_id=conversation_id, role="assistant", content=state["final_output"]))
         run.status = "success"

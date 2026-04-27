@@ -5,7 +5,8 @@ from app.db.models import AgentRun, Conversation, ConversationMessage, UploadedF
 
 
 def create_conversation(db: Session, title: str | None = None, project_id: int = 1) -> Conversation:
-    conversation = Conversation(id=str(uuid4()), project_id=project_id, title=title or "New conversation")
+    default_title = f"需求发现会话 {datetime.utcnow().strftime('%m-%d %H:%M')}"
+    conversation = Conversation(id=str(uuid4()), project_id=project_id, title=title or default_title)
     db.add(conversation)
     db.commit()
     db.refresh(conversation)
@@ -24,6 +25,8 @@ def add_message(db: Session, conversation_id: str, role: str, content: str) -> C
     conversation = db.get(Conversation, conversation_id)
     if conversation:
         conversation.updated_at = datetime.utcnow()
+        if role == "user" and conversation.title in {"New conversation", "需求发现会话"}:
+            conversation.title = content.strip()[:24] or conversation.title
     message = ConversationMessage(conversation_id=conversation_id, role=role, content=content)
     db.add(message)
     db.commit()
