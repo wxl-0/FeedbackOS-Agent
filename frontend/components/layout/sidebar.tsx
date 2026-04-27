@@ -1,12 +1,11 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, MessageSquareText } from "lucide-react";
+import { MessageSquareText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
-  ["Agent Workspace", "/workspace", MessageSquareText],
-  ["Evaluation", "/evaluation", BarChart3]
+  ["Agent Workspace", "/workspace", MessageSquareText]
 ] as const;
 
 export function Sidebar() {

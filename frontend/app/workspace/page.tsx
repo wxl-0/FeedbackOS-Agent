@@ -1,17 +1,25 @@
 "use client";
+
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Download, FileText, Loader2, Plus, Save, Send, User } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, Download, FileText, Loader2, Plus, Save, Send, User } from "lucide-react";
+import { EvaluationChart } from "@/components/charts/evaluation-chart";
 import { api } from "@/lib/api";
 
-const tabs = ["当前文件", "Feedback Inbox", "Insight Cluster", "PRD"] as const;
+const tabs = ["当前文件", "Feedback Inbox", "Insight Cluster", "PRD", "Evaluation"] as const;
+type Tab = (typeof tabs)[number];
+
+function pct(value: number | undefined) {
+  return `${Math.round((value || 0) * 100)}%`;
+}
 
 export default function WorkspacePage() {
   const [conversation, setConversation] = useState<any>();
   const [conversations, setConversations] = useState<any[]>([]);
   const [workspace, setWorkspace] = useState<any>();
   const [task, setTask] = useState("");
-  const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("当前文件");
+  const [activeTab, setActiveTab] = useState<Tab>("当前文件");
   const [busy, setBusy] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function refreshHistory() {
@@ -42,6 +50,7 @@ export default function WorkspacePage() {
   }, []);
 
   const messages = useMemo(() => workspace?.conversation?.messages || [], [workspace]);
+  const gridCols = historyOpen ? "grid-cols-[250px_380px_minmax(620px,1fr)]" : "grid-cols-[44px_380px_minmax(620px,1fr)]";
 
   async function switchConversation(id: string) {
     const data = await api.conversation(id);
@@ -97,85 +106,126 @@ export default function WorkspacePage() {
     }
   }
 
-  return <div className="grid h-[calc(100vh-6.5rem)] grid-cols-[260px_minmax(0,1fr)_460px] gap-4">
-    <aside className="card min-h-0 overflow-hidden">
-      <div className="flex items-center justify-between border-b border-line p-3">
-        <div className="text-sm font-semibold">会话历史</div>
-        <button className="btn h-8 w-8 px-0" onClick={newConversation} title="新会话"><Plus size={15} /></button>
-      </div>
-      <div className="h-[calc(100%-3.5rem)] space-y-2 overflow-y-auto p-3">
-        {conversations.length === 0 && <p className="text-sm text-muted">暂无会话</p>}
-        {conversations.map(row => <button key={row.id} onClick={() => switchConversation(row.id)} className={`w-full rounded-md border p-3 text-left text-sm hover:bg-slate-50 ${conversation?.id === row.id ? "border-brand bg-[#e9f3f2]" : "border-line bg-white"}`}>
-          <div className="truncate font-medium">{row.title}</div>
-          <div className="mt-1 truncate text-xs text-muted">{row.id}</div>
-          <div className="mt-2 text-xs text-muted">{row.message_count} messages · {row.file_count || 0} files</div>
-        </button>)}
-      </div>
-    </aside>
-
-    <section className="card flex min-h-0 flex-col overflow-hidden">
-      <div className="border-b border-line p-4">
-        <h1 className="text-xl font-semibold">Agent Workspace</h1>
-      </div>
-
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-        {messages.length === 0 && <div className="rounded-lg border border-dashed border-line bg-slate-50 p-8 text-center text-sm text-muted">上传文件开始分析</div>}
-        {messages.map((m: any) => <div key={m.id} className={`flex gap-3 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-          {m.role !== "user" && <div className="mt-1 flex h-8 w-8 items-center justify-center rounded-full bg-[#e9f3f2] text-brand"><Bot size={16} /></div>}
-          <div className={`max-w-[72%] rounded-lg border border-line p-3 text-sm leading-6 ${m.role === "user" ? "bg-brand text-white" : "bg-white"}`}>{m.content}</div>
-          {m.role === "user" && <div className="mt-1 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-muted"><User size={16} /></div>}
-        </div>)}
-      </div>
-
-      <div className="border-t border-line p-4">
-        <input ref={fileRef} type="file" className="hidden" accept=".csv,.xlsx,.xls,.txt,.md,.docx" onChange={(e) => upload(e.target.files?.[0])} />
-        <div className="flex gap-2">
-          <input className="input flex-1" placeholder="输入你想让 Agent 分析的问题..." value={task} onChange={(e) => setTask(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} />
-          <button className="btn btn-primary w-10 px-0" disabled={busy || !task.trim()} onClick={send} title="发送">{busy ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}</button>
-          <button className="btn w-10 px-0" disabled={busy} onClick={() => fileRef.current?.click()} title="上传文件"><Plus size={16} /></button>
+  return (
+    <div className={`grid h-[calc(100vh-5.5rem)] gap-4 ${gridCols}`}>
+      <aside className="card min-h-0 overflow-hidden">
+        <div className="flex items-center justify-between border-b border-line p-2">
+          {historyOpen && <div className="text-sm font-semibold">会话历史</div>}
+          <button className="btn h-8 w-8 px-0" onClick={() => setHistoryOpen(!historyOpen)} title={historyOpen ? "隐藏历史" : "展开历史"}>
+            {historyOpen ? <ChevronLeft size={15} /> : <ChevronRight size={15} />}
+          </button>
         </div>
-      </div>
-    </section>
+        {historyOpen && (
+          <div className="h-[calc(100%-3.25rem)] space-y-2 overflow-y-auto p-3">
+            <button className="btn btn-primary w-full" onClick={newConversation}>
+              <Plus size={15} /> 新会话
+            </button>
+            {conversations.length === 0 && <p className="text-sm text-muted">暂无会话</p>}
+            {conversations.map((row) => (
+              <button
+                key={row.id}
+                onClick={() => switchConversation(row.id)}
+                className={`w-full rounded-md border p-3 text-left text-sm hover:bg-slate-50 ${conversation?.id === row.id ? "border-brand bg-[#e9f3f2]" : "border-line bg-white"}`}
+              >
+                <div className="truncate font-medium">{row.title}</div>
+                <div className="mt-1 truncate text-xs text-muted">{row.id}</div>
+                <div className="mt-2 text-xs text-muted">{row.message_count} messages · {row.file_count || 0} files</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </aside>
 
-    <aside className="card min-h-0 overflow-hidden">
-      <div className="flex flex-wrap gap-2 border-b border-line p-3">
-        {tabs.map(tab => <button key={tab} className={`rounded-md px-2.5 py-1.5 text-xs ${activeTab === tab ? "bg-brand text-white" : "bg-slate-50 text-muted hover:text-ink"}`} onClick={() => setActiveTab(tab)}>{tab}</button>)}
-      </div>
-      <div className="h-[calc(100%-4rem)] overflow-y-auto p-4">
-        {activeTab === "当前文件" && <FilePanel files={workspace?.files || []} />}
-        {activeTab === "Feedback Inbox" && <FeedbackPanel items={workspace?.feedback || []} />}
-        {activeTab === "Insight Cluster" && <ClusterPanel clusters={workspace?.clusters || []} />}
-        {activeTab === "PRD" && <PrdPanel prds={workspace?.prds || []} reviewer={workspace?.reviewer_result} onSaved={() => conversation?.id && load(conversation.id)} />}
-      </div>
-    </aside>
-  </div>;
+      <section className="card flex min-h-0 flex-col overflow-hidden">
+        <div className="border-b border-line p-4">
+          <h1 className="text-lg font-semibold">Agent Workspace</h1>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+          {messages.length === 0 && <div className="rounded-lg border border-dashed border-line bg-slate-50 p-8 text-center text-sm text-muted">上传文件开始分析</div>}
+          {messages.map((m: any) => (
+            <div key={m.id} className={`flex gap-3 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+              {m.role !== "user" && <div className="mt-1 flex h-8 w-8 items-center justify-center rounded-full bg-[#e9f3f2] text-brand"><Bot size={16} /></div>}
+              <div className={`max-w-[82%] whitespace-pre-wrap rounded-lg border border-line p-3 text-sm leading-6 ${m.role === "user" ? "bg-brand text-white" : "bg-white"}`}>{m.content}</div>
+              {m.role === "user" && <div className="mt-1 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-muted"><User size={16} /></div>}
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-line p-4">
+          <input ref={fileRef} type="file" className="hidden" accept=".csv,.xlsx,.xls,.txt,.md,.docx" onChange={(e) => upload(e.target.files?.[0])} />
+          <div className="flex gap-2">
+            <input className="input flex-1" placeholder="输入你想让 Agent 分析的问题..." value={task} onChange={(e) => setTask(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} />
+            <button className="btn btn-primary w-10 px-0" disabled={busy || !task.trim()} onClick={send} title="发送">{busy ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}</button>
+            <button className="btn w-10 px-0" disabled={busy} onClick={() => fileRef.current?.click()} title="上传文件"><Plus size={16} /></button>
+          </div>
+        </div>
+      </section>
+
+      <aside className="card min-h-0 overflow-hidden">
+        <div className="flex flex-wrap gap-2 border-b border-line p-3">
+          {tabs.map((tab) => (
+            <button key={tab} className={`rounded-md px-2.5 py-1.5 text-xs ${activeTab === tab ? "bg-brand text-white" : "bg-slate-50 text-muted hover:text-ink"}`} onClick={() => setActiveTab(tab)}>
+              {tab}
+            </button>
+          ))}
+        </div>
+        <div className="h-[calc(100%-4rem)] overflow-y-auto p-4">
+          {activeTab === "当前文件" && <FilePanel files={workspace?.files || []} />}
+          {activeTab === "Feedback Inbox" && <FeedbackPanel items={workspace?.feedback || []} />}
+          {activeTab === "Insight Cluster" && <ClusterPanel clusters={workspace?.clusters || []} />}
+          {activeTab === "PRD" && <PrdPanel prds={workspace?.prds || []} reviewer={workspace?.reviewer_result} onSaved={() => conversation?.id && load(conversation.id)} />}
+          {activeTab === "Evaluation" && <EvaluationPanel data={workspace?.evaluation} />}
+        </div>
+      </aside>
+    </div>
+  );
 }
 
 function FilePanel({ files }: { files: any[] }) {
   if (!files.length) return <p className="text-sm text-muted">当前会话还没有文件。</p>;
-  return <div className="space-y-3">{files.map(file => <div key={file.id} className="rounded-md border border-line p-3">
-    <div className="font-medium">{file.file_name}</div>
-    <div className="mt-1 text-xs text-muted">{file.detected_data_type} · rows {file.row_count} · chunks {file.chunk_count}</div>
-    <div className="mt-2 flex flex-wrap gap-2 text-xs"><span className="badge">{file.parse_status}</span><span className="badge">{file.ingest_status}</span><span className="badge">{file.vector_status}</span></div>
-  </div>)}</div>;
+  return <div className="grid grid-cols-2 gap-3">{files.map((file) => (
+    <div key={file.id} className="rounded-md border border-line p-3">
+      <div className="truncate font-medium">{file.file_name}</div>
+      <div className="mt-1 text-xs text-muted">{file.detected_data_type} · rows {file.row_count} · chunks {file.chunk_count}</div>
+      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+        <span className="badge">{file.parse_status}</span>
+        <span className="badge">{file.ingest_status}</span>
+        <span className="badge">{file.vector_status}</span>
+      </div>
+    </div>
+  ))}</div>;
 }
 
 function FeedbackPanel({ items }: { items: any[] }) {
   if (!items.length) return <p className="text-sm text-muted">当前会话还没有反馈数据。</p>;
-  return <div className="space-y-3">{items.map(item => <article key={item.id} className="rounded-md border border-line p-3">
-    <p className="text-sm leading-6">{item.feedback_text}</p>
-    <p className="mt-2 text-xs text-muted">{item.feedback_summary}</p>
-    <div className="mt-2 flex flex-wrap gap-2"><span className="badge">{item.product_module}</span><span className="badge">{item.sentiment_label}</span><span className="badge">{item.severity_label}</span><span className="badge">{item.issue_type}</span></div>
-  </article>)}</div>;
+  return <div className="grid grid-cols-2 gap-3">{items.map((item) => (
+    <article key={item.id} className="rounded-md border border-line p-3">
+      <p className="text-sm leading-6">{item.feedback_text}</p>
+      <p className="mt-2 text-xs text-muted">{item.feedback_summary}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <span className="badge">{item.product_module}</span>
+        <span className="badge">{item.sentiment_label}</span>
+        <span className="badge">{item.severity_label}</span>
+        <span className="badge">{item.issue_type}</span>
+      </div>
+    </article>
+  ))}</div>;
 }
 
 function ClusterPanel({ clusters }: { clusters: any[] }) {
   if (!clusters.length) return <p className="text-sm text-muted">运行 Agent 后展示痛点聚类。</p>;
-  return <div className="space-y-3">{clusters.map(cluster => <section key={cluster.id} className="rounded-md border border-line p-3">
-    <div className="font-medium">{cluster.cluster_name}</div>
-    <p className="mt-2 text-sm text-muted">{cluster.cluster_summary}</p>
-    <div className="mt-2 flex flex-wrap gap-2"><span className="badge">{cluster.feedback_count} 条</span><span className="badge">负面率 {Math.round((cluster.negative_ratio || 0) * 100)}%</span><span className="badge">severity {cluster.severity_score}</span></div>
-  </section>)}</div>;
+  return <div className="grid grid-cols-2 gap-3">{clusters.map((cluster) => (
+    <section key={cluster.id} className="rounded-md border border-line p-3">
+      <div className="font-medium">{cluster.cluster_name}</div>
+      <p className="mt-2 text-sm text-muted">{cluster.cluster_summary}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <span className="badge">{cluster.feedback_count} 条</span>
+        <span className="badge">负面率 {Math.round((cluster.negative_ratio || 0) * 100)}%</span>
+        <span className="badge">severity {cluster.severity_score}</span>
+      </div>
+    </section>
+  ))}</div>;
 }
 
 function PrdPanel({ prds, reviewer, onSaved }: { prds: any[]; reviewer?: any; onSaved: () => void }) {
@@ -201,15 +251,68 @@ function PrdPanel({ prds, reviewer, onSaved }: { prds: any[]; reviewer?: any; on
   }
 
   return <div className="space-y-3">
-    <div className="flex flex-wrap gap-2">
-      <button className="btn" onClick={save}><Save size={14} />保存</button>
-      <button className="btn" onClick={exportMarkdown}><Download size={14} />Markdown</button>
-      <button className="btn" onClick={() => api.exportPrdDocx(latest.title, text)}><FileText size={14} />DOCX</button>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <div className="font-semibold">{latest.title}</div>
+        <div className="text-xs text-muted">{latest.version} · {latest.status}</div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button className="btn" onClick={save}><Save size={14} />保存</button>
+        <button className="btn" onClick={exportMarkdown}><Download size={14} />Markdown</button>
+        <button className="btn" onClick={() => api.exportPrdDocx(latest.title, text)}><FileText size={14} />DOCX</button>
+      </div>
     </div>
     {reviewer && <div className="rounded-md border border-line bg-slate-50 p-3 text-sm">
       <div className="font-medium">Reviewer 评分：{reviewer.quality_score ?? 0}</div>
       <div className="mt-1 text-xs text-muted">完整度 {reviewer.prd_completeness_score ?? 0} · 风险 {reviewer.hallucination_risk || "unknown"}</div>
     </div>}
-    <textarea className="min-h-[560px] w-full resize-y rounded-md border border-line bg-white p-3 font-mono text-sm leading-6 outline-none focus:border-brand" value={text} onChange={(e) => setText(e.target.value)} />
+    <textarea className="min-h-[620px] w-full resize-y rounded-md border border-line bg-white p-3 font-mono text-sm leading-6 outline-none focus:border-brand" value={text} onChange={(e) => setText(e.target.value)} />
+  </div>;
+}
+
+function EvaluationPanel({ data }: { data?: any }) {
+  if (!data) return <p className="text-sm text-muted">当前会话暂无 Evaluation 指标。</p>;
+  const cards = [
+    ["Agent Run 总次数", data.overview?.agent_run_total],
+    ["Agent Run 成功率", pct(data.overview?.agent_run_success_rate)],
+    ["平均 Step 数", data.overview?.avg_agent_steps],
+    ["LLM 调用次数", data.llm?.llm_call_count],
+    ["输入 Token", data.llm?.input_tokens],
+    ["输出 Token", data.llm?.output_tokens],
+    ["检索次数", data.retrieval?.retrieval_count],
+    ["证据覆盖率", pct(data.retrieval?.opportunity_evidence_coverage)],
+    ["PRD 完整度", data.quality?.prd_completeness_avg],
+    ["Reviewer 平均分", data.quality?.reviewer_avg_score],
+    ["人工确认比例", pct(data.quality?.human_review_rate)],
+    ["平均压缩率", pct(data.compression?.avg_compression_rate)],
+  ];
+
+  return <div className="space-y-4">
+    <div className="grid grid-cols-4 gap-3">
+      {cards.map(([label, value]) => (
+        <div key={String(label)} className="rounded-md border border-line bg-white p-3">
+          <div className="text-xs text-muted">{label}</div>
+          <div className="mt-1 text-lg font-semibold">{value ?? 0}</div>
+        </div>
+      ))}
+    </div>
+    <div className="grid grid-cols-2 gap-3">
+      <section className="rounded-md border border-line bg-white p-3">
+        <h3 className="text-sm font-semibold">生成质量</h3>
+        <EvaluationChart data={[{ name: "PRD", value: data.quality?.prd_completeness_avg || 0 }, { name: "Reviewer", value: data.quality?.reviewer_avg_score || 0 }]} />
+      </section>
+      <section className="rounded-md border border-line bg-white p-3">
+        <h3 className="text-sm font-semibold">LLM 调用</h3>
+        <pre className="mt-3 max-h-56 overflow-auto rounded-md bg-slate-50 p-3 text-xs">{JSON.stringify(data.llm, null, 2)}</pre>
+      </section>
+      <section className="rounded-md border border-line bg-white p-3">
+        <h3 className="text-sm font-semibold">检索与证据</h3>
+        <pre className="mt-3 max-h-56 overflow-auto rounded-md bg-slate-50 p-3 text-xs">{JSON.stringify(data.retrieval, null, 2)}</pre>
+      </section>
+      <section className="rounded-md border border-line bg-white p-3">
+        <h3 className="text-sm font-semibold">上下文压缩</h3>
+        <pre className="mt-3 max-h-56 overflow-auto rounded-md bg-slate-50 p-3 text-xs">{JSON.stringify(data.compression, null, 2)}</pre>
+      </section>
+    </div>
   </div>;
 }
