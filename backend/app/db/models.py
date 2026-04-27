@@ -16,10 +16,29 @@ class Project(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
+class Conversation(Base):
+    __tablename__ = "conversations"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    project_id: Mapped[int] = mapped_column(Integer, default=1)
+    title: Mapped[str] = mapped_column(String(255), default="New conversation")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class ConversationMessage(Base):
+    __tablename__ = "conversation_messages"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(String(80), ForeignKey("conversations.id"))
+    role: Mapped[str] = mapped_column(String(40))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
 class UploadedFile(Base):
     __tablename__ = "uploaded_files"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(Integer, default=1)
+    conversation_id: Mapped[str | None] = mapped_column(String(80), index=True)
     file_name: Mapped[str] = mapped_column(String(255))
     file_path: Mapped[str] = mapped_column(String(500))
     file_type: Mapped[str] = mapped_column(String(40))
@@ -40,6 +59,7 @@ class DataSource(Base):
     __tablename__ = "data_sources"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(Integer, default=1)
+    conversation_id: Mapped[str | None] = mapped_column(String(80), index=True)
     uploaded_file_id: Mapped[int | None] = mapped_column(ForeignKey("uploaded_files.id"))
     source_name: Mapped[str] = mapped_column(String(255))
     source_type: Mapped[str] = mapped_column(String(80))
@@ -52,6 +72,7 @@ class FeedbackItem(Base):
     __tablename__ = "feedback_items"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(Integer, default=1)
+    conversation_id: Mapped[str | None] = mapped_column(String(80), index=True)
     data_source_id: Mapped[int | None] = mapped_column(ForeignKey("data_sources.id"))
     source_type: Mapped[str] = mapped_column(String(80), default="upload")
     channel: Mapped[str | None] = mapped_column(String(80))
@@ -70,6 +91,7 @@ class MetricSnapshot(Base):
     __tablename__ = "metric_snapshots"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(Integer, default=1)
+    conversation_id: Mapped[str | None] = mapped_column(String(80), index=True)
     data_source_id: Mapped[int | None] = mapped_column(ForeignKey("data_sources.id"))
     metric_date: Mapped[str | None] = mapped_column(String(80))
     metric_name: Mapped[str] = mapped_column(String(120))
@@ -83,6 +105,7 @@ class DocumentChunk(Base):
     __tablename__ = "document_chunks"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(Integer, default=1)
+    conversation_id: Mapped[str | None] = mapped_column(String(80), index=True)
     uploaded_file_id: Mapped[int | None] = mapped_column(ForeignKey("uploaded_files.id"))
     chunk_type: Mapped[str] = mapped_column(String(80), default="document")
     chunk_text: Mapped[str] = mapped_column(Text)
@@ -95,6 +118,7 @@ class InsightCluster(Base):
     __tablename__ = "insight_clusters"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(Integer, default=1)
+    conversation_id: Mapped[str | None] = mapped_column(String(80), index=True)
     cluster_name: Mapped[str] = mapped_column(String(255))
     cluster_summary: Mapped[str] = mapped_column(Text)
     product_module: Mapped[str | None] = mapped_column(String(80))
@@ -112,6 +136,7 @@ class Opportunity(Base):
     __tablename__ = "opportunities"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(Integer, default=1)
+    conversation_id: Mapped[str | None] = mapped_column(String(80), index=True)
     cluster_id: Mapped[int | None] = mapped_column(ForeignKey("insight_clusters.id"))
     title: Mapped[str] = mapped_column(String(255))
     problem_statement: Mapped[str] = mapped_column(Text)
@@ -133,6 +158,7 @@ class PrdDocument(Base):
     __tablename__ = "prd_documents"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(Integer, default=1)
+    conversation_id: Mapped[str | None] = mapped_column(String(80), index=True)
     opportunity_id: Mapped[int | None] = mapped_column(ForeignKey("opportunities.id"))
     title: Mapped[str] = mapped_column(String(255))
     version: Mapped[str] = mapped_column(String(40), default="v0.1")
@@ -146,6 +172,7 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(Integer, default=1)
+    conversation_id: Mapped[str | None] = mapped_column(String(80), index=True)
     user_task: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(40), default="running")
     final_output: Mapped[str | None] = mapped_column(Text)
@@ -172,6 +199,7 @@ class ProjectMemory(Base):
     __tablename__ = "project_memory"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(Integer, default=1)
+    conversation_id: Mapped[str | None] = mapped_column(String(80), index=True)
     memory_type: Mapped[str] = mapped_column(String(80))
     content_json: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(String(120))

@@ -5,6 +5,7 @@ class AgentState(TypedDict, total=False):
     task: str
     user_id: str
     project_id: int
+    conversation_id: str
     run_id: int
     messages: list[dict[str, str]]
     conversation_summary: str
@@ -21,4 +22,3 @@ class AgentState(TypedDict, total=False):
     reviewer_result: dict[str, Any]
     needs_human_review: bool
     final_output: str
-

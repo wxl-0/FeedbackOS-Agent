@@ -17,8 +17,10 @@ async def analyze_feedback_item(db: Session, item: FeedbackItem, run_id: int | N
     return item
 
 
-def list_feedback(db: Session, project_id: int = 1, product_module: str | None = None, sentiment: str | None = None, severity: str | None = None):
+def list_feedback(db: Session, project_id: int = 1, conversation_id: str | None = None, product_module: str | None = None, sentiment: str | None = None, severity: str | None = None):
     q = db.query(FeedbackItem).filter(FeedbackItem.project_id == project_id)
+    if conversation_id:
+        q = q.filter(FeedbackItem.conversation_id == conversation_id)
     if product_module:
         q = q.filter(FeedbackItem.product_module == product_module)
     if sentiment:
@@ -37,15 +39,17 @@ def serialize_feedback(x: FeedbackItem):
     }
 
 
-def dashboard_metrics(db: Session, project_id: int = 1):
-    total = db.query(FeedbackItem).filter_by(project_id=project_id).count()
-    neg = db.query(FeedbackItem).filter_by(project_id=project_id, sentiment_label="negative").count()
-    sentiment = db.query(FeedbackItem.sentiment_label, func.count()).filter_by(project_id=project_id).group_by(FeedbackItem.sentiment_label).all()
-    modules = db.query(FeedbackItem.product_module, func.count()).filter_by(project_id=project_id).group_by(FeedbackItem.product_module).all()
+def dashboard_metrics(db: Session, project_id: int = 1, conversation_id: str | None = None):
+    q = db.query(FeedbackItem).filter_by(project_id=project_id)
+    if conversation_id:
+        q = q.filter(FeedbackItem.conversation_id == conversation_id)
+    total = q.count()
+    neg = q.filter(FeedbackItem.sentiment_label == "negative").count()
+    sentiment = q.with_entities(FeedbackItem.sentiment_label, func.count()).group_by(FeedbackItem.sentiment_label).all()
+    modules = q.with_entities(FeedbackItem.product_module, func.count()).group_by(FeedbackItem.product_module).all()
     return {
         "total_feedback": total,
         "negative_rate": round(neg / total, 3) if total else 0,
         "sentiment_distribution": [{"name": k or "unknown", "value": v} for k, v in sentiment],
         "module_distribution": [{"name": k or "unknown", "value": v} for k, v in modules],
     }
-

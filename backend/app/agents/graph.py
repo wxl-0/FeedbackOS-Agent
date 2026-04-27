@@ -9,14 +9,14 @@ from app.agents.opportunity_agent import generate_opportunities
 from app.agents.prd_writer_agent import generate_prd
 from app.agents.reviewer_agent import review_prd
 from app.agents.state import AgentState
-from app.db.models import AgentRun, AgentStep, FeedbackItem, ProjectMemory
+from app.db.models import AgentRun, AgentStep, ConversationMessage, FeedbackItem, ProjectMemory, UploadedFile
 from app.services.feedback_service import analyze_feedback_item, serialize_feedback
 from app.services.observability_service import agent_step
 from app.vectorstore.milvus_client import vector_client
 
 
-async def run_agent_workflow(db: Session, task: str, project_id: int = 1, user_id: str = "local_user") -> AgentState:
-    run = AgentRun(project_id=project_id, user_task=task, status="running")
+async def run_agent_workflow(db: Session, task: str, project_id: int = 1, user_id: str = "local_user", conversation_id: str | None = None) -> AgentState:
+    run = AgentRun(project_id=project_id, conversation_id=conversation_id, user_task=task, status="running")
     db.add(run)
     db.commit()
     db.refresh(run)
@@ -28,14 +28,16 @@ async def run_agent_workflow(db: Session, task: str, project_id: int = 1, user_i
 
     async def file_intake(state: AgentState) -> AgentState:
         with agent_step(db, run.id, "File Intake Agent", "verify_uploaded_sources", "sqlite_query") as out:
-            count = db.query(FeedbackItem).filter_by(project_id=project_id).count()
+            files = db.query(UploadedFile).filter_by(project_id=project_id, conversation_id=conversation_id).count()
+            count = db.query(FeedbackItem).filter_by(project_id=project_id, conversation_id=conversation_id).count()
             out["feedback_count"] = count
-            out["step_summary"] = f"确认项目中已有 {count} 条入库反馈；未读取完整原始文件。"
+            out["file_count"] = files
+            out["step_summary"] = f"确认当前会话中已有 {files} 个文件、{count} 条入库反馈；未读取完整原始文件。"
         return state
 
     async def data_intake(state: AgentState) -> AgentState:
         with agent_step(db, run.id, "Data Intake Agent", "normalize_existing_records", "sqlite_update") as out:
-            rows = db.query(FeedbackItem).filter_by(project_id=project_id).filter(FeedbackItem.feedback_summary.is_(None)).limit(100).all()
+            rows = db.query(FeedbackItem).filter_by(project_id=project_id, conversation_id=conversation_id).filter(FeedbackItem.feedback_summary.is_(None)).limit(100).all()
             for item in rows:
                 await analyze_feedback_item(db, item, run.id)
             out["step_summary"] = f"补齐 {len(rows)} 条反馈的标签与摘要。"
@@ -43,35 +45,36 @@ async def run_agent_workflow(db: Session, task: str, project_id: int = 1, user_i
 
     async def feedback_analyst(state: AgentState) -> AgentState:
         with agent_step(db, run.id, "Feedback Analyst Agent", "label_distribution", "sqlite_query") as out:
-            rows = db.query(FeedbackItem).filter_by(project_id=project_id).limit(200).all()
+            rows = db.query(FeedbackItem).filter_by(project_id=project_id, conversation_id=conversation_id).limit(200).all()
             out["step_summary"] = f"完成 {len(rows)} 条反馈的情绪、模块、严重度分析。"
         return state
 
     async def retrieval(state: AgentState) -> AgentState:
         with agent_step(db, run.id, "Retrieval Agent", "semantic_search_feedback", "vector_search", {"query": state["task"]}) as out:
-            hits = await vector_client.semantic_search_feedback(state["task"], db, top_k=12, filters={"project_id": project_id}, run_id=run.id)
+            hits = await vector_client.semantic_search_feedback(state["task"], db, top_k=12, filters={"project_id": project_id, "conversation_id": conversation_id}, run_id=run.id)
             if not hits:
-                rows = db.query(FeedbackItem).filter_by(project_id=project_id).limit(12).all()
+                rows = db.query(FeedbackItem).filter_by(project_id=project_id, conversation_id=conversation_id).limit(12).all()
                 hits = [{**serialize_feedback(r), "feedback_id": r.id, "text": r.feedback_text, "similarity": 0} for r in rows]
             retrieved = [{"id": h.get("feedback_id") or h.get("id"), "feedback_text": h.get("text") or h.get("feedback_text"), "sentiment_label": h.get("sentiment_label"), "product_module": h.get("product_module")} for h in hits]
+            out["retrieved_feedback"] = retrieved
             out["step_summary"] = f"召回 {len(hits)} 条相关反馈证据，并写入 retrieval_logs。"
         return {**state, "retrieved_feedback": retrieved}
 
     async def cluster(state: AgentState) -> AgentState:
         with agent_step(db, run.id, "Cluster Agent", "generate_clusters", "cluster_rules") as out:
-            clusters = generate_clusters(db, project_id)
+            clusters = generate_clusters(db, project_id, conversation_id)
             out["step_summary"] = f"生成/更新 {len(clusters)} 个痛点聚类。"
         return state
 
     async def metric(state: AgentState) -> AgentState:
         with agent_step(db, run.id, "Metric Analyst Agent", "analyze_metrics", "metric_trend") as out:
-            metric_summary = analyze_metrics(db, project_id)
+            metric_summary = analyze_metrics(db, project_id, conversation_id)
             out["step_summary"] = metric_summary
         return {**state, "metric_summary": metric_summary}
 
     async def opportunity(state: AgentState) -> AgentState:
         with agent_step(db, run.id, "Opportunity Agent", "score_opportunities", "priority_formula") as out:
-            opps = generate_opportunities(db, project_id)
+            opps = generate_opportunities(db, project_id, conversation_id)
             top = sorted(opps, key=lambda x: x.priority_score, reverse=True)
             selected = top[0].id if top else None
             out["step_summary"] = f"生成 {len(opps)} 个机会点，最高优先级为 {top[0].priority_level if top else 'N/A'}。"
@@ -87,7 +90,7 @@ async def run_agent_workflow(db: Session, task: str, project_id: int = 1, user_i
         if not state.get("selected_opportunity_id"):
             return {**state, "draft_prd": ""}
         with agent_step(db, run.id, "PRD Writer Agent", "generate_prd", "prd_writer") as out:
-            prd = await generate_prd(db, state["selected_opportunity_id"], project_id, state.get("metric_summary", ""))
+            prd = await generate_prd(db, state["selected_opportunity_id"], project_id, state.get("metric_summary", ""), conversation_id)
             out["prd_id"] = prd.id
             out["step_summary"] = f"生成 PRD 草稿 #{prd.id}：{prd.title}。"
         return {**state, "draft_prd": prd.prd_markdown, "current_prd_id": prd.id}
@@ -136,6 +139,7 @@ async def run_agent_workflow(db: Session, task: str, project_id: int = 1, user_i
     initial: AgentState = {
         "task": task,
         "project_id": project_id,
+        "conversation_id": conversation_id or "",
         "user_id": user_id,
         "run_id": run.id,
         "messages": [{"role": "user", "content": task}],
@@ -145,7 +149,9 @@ async def run_agent_workflow(db: Session, task: str, project_id: int = 1, user_i
     app = graph.compile()
     try:
         state = await app.ainvoke(initial)
-        db.add(ProjectMemory(project_id=project_id, memory_type="pending_agent_finding", content_json=json.dumps({"summary": state["final_output"], "run_id": run.id}, ensure_ascii=False), source="agent_run", confirmed_by_user=False))
+        db.add(ProjectMemory(project_id=project_id, conversation_id=conversation_id, memory_type="pending_agent_finding", content_json=json.dumps({"summary": state["final_output"], "run_id": run.id}, ensure_ascii=False), source="agent_run", confirmed_by_user=False))
+        if conversation_id:
+            db.add(ConversationMessage(conversation_id=conversation_id, role="assistant", content=state["final_output"]))
         run.status = "success"
         run.final_output = state["final_output"]
         run.finished_at = datetime.utcnow()

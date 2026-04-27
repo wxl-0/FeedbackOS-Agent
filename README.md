@@ -1,19 +1,16 @@
 # FeedbackOS Agent｜AI 产品需求发现多智能体平台
 
-FeedbackOS Agent 是面向产品经理的多智能体需求发现工作台。系统以用户上传文件为核心入口，支持客服工单、App 评论、用户访谈纪要、NPS 开放题、业务指标表、历史 PRD 和版本复盘等资料的解析、清洗、入库、向量化与证据检索，并通过 LangGraph 风格的多 Agent workflow 完成反馈分析、痛点聚类、机会点评估、PRD 生成、Reviewer 质量评审、人工确认和长期记忆沉淀。
+FeedbackOS Agent 是面向产品经理的 Chat-first 多智能体需求发现工作台。系统以 Agent Workspace 为主入口，用户在同一个聊天会话里上传文件、发起分析任务、查看执行轨迹、检索证据、PRD 草稿、Reviewer 评审和 Evaluation 指标。每个会话都有独立 `conversation_id`，上传文件必须绑定当前会话，Agent 每次只分析当前 `conversation_id` 下的文件和入库数据。
 
 本项目不内置业务 demo 数据，不提供 Seed Demo Data 按钮。所有业务数据必须来自用户上传文件或用户在页面手动录入。LLM 不接收完整原始文件，只接收经过结构化入库、检索和上下文压缩后的相关证据。API Key 只从后端环境变量读取。
 
 ## 核心功能
 
-- Upload Center：上传 CSV、Excel、TXT、Markdown、DOCX，解析文件类型、识别数据类型、预览字段映射并确认入库。
-- Feedback Inbox：查看已入库反馈、摘要、情绪、模块、严重度和问题类型。
-- Agent Console：运行 Orchestrator、Intake、Analyst、Retrieval、Cluster、Metric、Opportunity、PRD Writer、Reviewer、Compression 全链路。
-- Insight Clusters：基于标签、规则和语义证据生成痛点聚类。
-- Opportunity Board：按优先级公式生成 P0/P1/P2 机会点，且没有 evidence_ids 的机会点不会被标记为 P0。
-- PRD Studio：查看和编辑 Markdown PRD，并调用 Reviewer 评审。
-- Memory Center：展示待确认记忆、已确认记忆、决策记忆和用户偏好记忆。
-- Evaluation：展示 Agent、LLM、检索证据、生成质量和上下文压缩指标。
+- Agent Workspace：聊天式主入口，支持当前会话上传文件、自动解析入库、运行 Agent workflow。
+- 右侧动态面板：用 Tab 展示当前文件、Agent 执行轨迹、检索证据、PRD 草稿、Reviewer 评审和 Evaluation 指标。
+- Conversation History：展示历史会话，切换后只加载该 `conversation_id` 的文件、消息和分析结果。
+- Evaluation：展示 Agent、LLM、检索证据、生成质量和上下文压缩指标，可按会话过滤。
+- 后台能力：反馈分析、痛点聚类、机会点评估、PRD 生成、Reviewer 质量评审仍保留，但不再强制作为独立页面入口。
 
 ## 技术架构
 
@@ -145,7 +142,7 @@ npm install
 npm run dev
 ```
 
-打开 `http://localhost:3000`，默认进入 Dashboard。后端健康检查为 `http://localhost:8000/health`。
+打开 `http://localhost:3000`，默认进入 Agent Workspace。后端健康检查为 `http://localhost:8000/health`。
 
 ## 环境变量
 

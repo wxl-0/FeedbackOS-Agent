@@ -3,8 +3,11 @@ from sqlalchemy.orm import Session
 from app.db.models import MetricSnapshot
 
 
-def analyze_metrics(db: Session, project_id: int = 1) -> str:
-    rows = db.query(MetricSnapshot).filter_by(project_id=project_id).order_by(MetricSnapshot.metric_name, MetricSnapshot.metric_date).all()
+def analyze_metrics(db: Session, project_id: int = 1, conversation_id: str | None = None) -> str:
+    q = db.query(MetricSnapshot).filter_by(project_id=project_id)
+    if conversation_id:
+        q = q.filter(MetricSnapshot.conversation_id == conversation_id)
+    rows = q.order_by(MetricSnapshot.metric_name, MetricSnapshot.metric_date).all()
     if not rows:
         return "未上传业务指标表，当前机会点评估主要依赖反馈证据。"
     groups = defaultdict(list)
@@ -19,4 +22,3 @@ def analyze_metrics(db: Session, project_id: int = 1) -> str:
         else:
             summaries.append(f"{name} 当前值 {values[-1]:.2f}")
     return "；".join(summaries[:8])
-

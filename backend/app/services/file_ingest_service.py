@@ -16,6 +16,7 @@ async def ingest_file(db: Session, file_id: int) -> dict:
     path = Path(uploaded.file_path)
     source = DataSource(
         project_id=uploaded.project_id,
+        conversation_id=uploaded.conversation_id,
         uploaded_file_id=uploaded.id,
         source_name=uploaded.file_name,
         source_type=uploaded.detected_data_type,
@@ -35,6 +36,7 @@ async def ingest_file(db: Session, file_id: int) -> dict:
                     continue
                 item = FeedbackItem(
                     project_id=uploaded.project_id,
+                    conversation_id=uploaded.conversation_id,
                     data_source_id=source.id,
                     source_type=uploaded.detected_data_type,
                     channel=str(row.get(mapping.get("channel"), ""))[:80] if mapping.get("channel") else None,
@@ -47,7 +49,7 @@ async def ingest_file(db: Session, file_id: int) -> dict:
                 db.refresh(item)
                 await analyze_feedback_item(db, item)
                 await vector_client.insert_feedback_embedding(item.id, item.project_id, f"{item.feedback_text}\n{item.feedback_summary or ''}", {
-                    "product_module": item.product_module, "sentiment_label": item.sentiment_label,
+                    "conversation_id": uploaded.conversation_id, "product_module": item.product_module, "sentiment_label": item.sentiment_label,
                     "source_type": item.source_type, "event_time": item.event_time,
                 })
         elif uploaded.detected_data_type == "metric_data":
@@ -60,6 +62,7 @@ async def ingest_file(db: Session, file_id: int) -> dict:
                     continue
                 db.add(MetricSnapshot(
                     project_id=uploaded.project_id,
+                    conversation_id=uploaded.conversation_id,
                     data_source_id=source.id,
                     metric_date=str(row.get(mapping.get("event_time") or mapping.get("metric_date"), ""))[:80],
                     metric_name=str(row.get(mapping.get("metric_name"), "metric"))[:120],
@@ -74,6 +77,7 @@ async def ingest_file(db: Session, file_id: int) -> dict:
             for chunk in chunks:
                 c = DocumentChunk(
                     project_id=uploaded.project_id,
+                    conversation_id=uploaded.conversation_id,
                     uploaded_file_id=uploaded.id,
                     chunk_type=uploaded.detected_data_type,
                     chunk_text=chunk,
@@ -83,15 +87,15 @@ async def ingest_file(db: Session, file_id: int) -> dict:
                 db.add(c)
                 db.commit()
                 db.refresh(c)
-                await vector_client.insert_document_embedding(c.id, c.project_id, uploaded.id, chunk, {"chunk_type": c.chunk_type})
+                await vector_client.insert_document_embedding(c.id, c.project_id, uploaded.id, chunk, {"conversation_id": uploaded.conversation_id, "chunk_type": c.chunk_type})
                 if any(w in chunk for w in ["痛", "问题", "希望", "建议", "不好", "慢", "失败"]):
-                    item = FeedbackItem(project_id=uploaded.project_id, data_source_id=source.id, source_type=uploaded.detected_data_type, feedback_text=chunk[:1200])
+                    item = FeedbackItem(project_id=uploaded.project_id, conversation_id=uploaded.conversation_id, data_source_id=source.id, source_type=uploaded.detected_data_type, feedback_text=chunk[:1200])
                     db.add(item)
                     db.commit()
                     db.refresh(item)
                     await analyze_feedback_item(db, item)
                     await vector_client.insert_feedback_embedding(item.id, item.project_id, item.feedback_text, {
-                        "product_module": item.product_module, "sentiment_label": item.sentiment_label, "source_type": item.source_type, "event_time": None,
+                        "conversation_id": uploaded.conversation_id, "product_module": item.product_module, "sentiment_label": item.sentiment_label, "source_type": item.source_type, "event_time": None,
                     })
         uploaded.ingest_status = "ingested"
         uploaded.vector_status = "completed" if uploaded.detected_data_type != "metric_data" else "skipped"

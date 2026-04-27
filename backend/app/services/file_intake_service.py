@@ -15,7 +15,7 @@ def safe_name(name: str) -> str:
     return Path(name).name.replace(" ", "_")
 
 
-async def save_upload(db: Session, file: UploadFile, project_id: int = 1) -> UploadedFile:
+async def save_upload(db: Session, file: UploadFile, project_id: int = 1, conversation_id: str | None = None) -> UploadedFile:
     settings = get_settings()
     target = settings.upload_dir / safe_name(file.filename or "upload.bin")
     idx = 1
@@ -26,6 +26,7 @@ async def save_upload(db: Session, file: UploadFile, project_id: int = 1) -> Upl
         shutil.copyfileobj(file.file, out)
     item = UploadedFile(
         project_id=project_id,
+        conversation_id=conversation_id,
         file_name=file.filename or target.name,
         file_path=str(target),
         file_type=target.suffix.lower().lstrip("."),
@@ -115,6 +116,7 @@ def serialize_upload(file: UploadedFile) -> dict[str, Any]:
     return {
         "id": file.id,
         "project_id": file.project_id,
+        "conversation_id": file.conversation_id,
         "file_name": file.file_name,
         "file_type": file.file_type,
         "file_size": file.file_size,
@@ -129,4 +131,3 @@ def serialize_upload(file: UploadedFile) -> dict[str, Any]:
         "error_message": file.error_message,
         "created_at": file.created_at.isoformat(),
     }
-

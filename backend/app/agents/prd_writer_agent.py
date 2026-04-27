@@ -5,7 +5,7 @@ from app.db.models import FeedbackItem, Opportunity, PrdDocument
 from app.vectorstore.milvus_client import vector_client
 
 
-async def generate_prd(db: Session, opportunity_id: int, project_id: int = 1, metric_summary: str = "") -> PrdDocument:
+async def generate_prd(db: Session, opportunity_id: int, project_id: int = 1, metric_summary: str = "", conversation_id: str | None = None) -> PrdDocument:
     opp = db.get(Opportunity, opportunity_id)
     evidence_ids = json.loads(opp.evidence_ids_json or "[]")
     items = db.query(FeedbackItem).filter(FeedbackItem.id.in_(evidence_ids)).all() if evidence_ids else []
@@ -22,7 +22,7 @@ async def generate_prd(db: Session, opportunity_id: int, project_id: int = 1, me
         "evidence_ids": evidence_ids,
     })
     md = result.get("prd_markdown") or prd_markdown(opportunity, evidence, metric_summary)
-    prd = PrdDocument(project_id=project_id, opportunity_id=opportunity_id, title=opp.title, prd_markdown=md)
+    prd = PrdDocument(project_id=project_id, conversation_id=conversation_id or opp.conversation_id, opportunity_id=opportunity_id, title=opp.title, prd_markdown=md)
     db.add(prd)
     db.commit()
     db.refresh(prd)

@@ -9,13 +9,16 @@ router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
 
 
 @router.post("/generate")
-def generate(db: Session = Depends(get_db)):
-    return [serialize(o) for o in generate_opportunities(db)]
+def generate(conversation_id: str, db: Session = Depends(get_db)):
+    return [serialize(o) for o in generate_opportunities(db, conversation_id=conversation_id)]
 
 
 @router.get("")
-def list_opportunities(db: Session = Depends(get_db)):
-    return [serialize(o) for o in db.query(Opportunity).order_by(Opportunity.priority_score.desc()).all()]
+def list_opportunities(conversation_id: str | None = None, db: Session = Depends(get_db)):
+    q = db.query(Opportunity)
+    if conversation_id:
+        q = q.filter(Opportunity.conversation_id == conversation_id)
+    return [serialize(o) for o in q.order_by(Opportunity.priority_score.desc()).all()]
 
 
 def serialize(o):

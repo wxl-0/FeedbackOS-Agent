@@ -1,18 +1,12 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Bot, Brain, FileText, Inbox, LayoutDashboard, Lightbulb, Network, UploadCloud } from "lucide-react";
+import { BarChart3, History, MessageSquareText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
-  ["Dashboard", "/dashboard", LayoutDashboard],
-  ["Upload Center", "/upload", UploadCloud],
-  ["Feedback Inbox", "/feedback", Inbox],
-  ["Insight Clusters", "/clusters", Network],
-  ["Opportunity Board", "/opportunities", Lightbulb],
-  ["Agent Console", "/agent-console", Bot],
-  ["PRD Studio", "/prd-studio", FileText],
-  ["Memory Center", "/memory", Brain],
+  ["Agent Workspace", "/workspace", MessageSquareText],
+  ["Conversation History", "/conversation-history", History],
   ["Evaluation", "/evaluation", BarChart3]
 ] as const;
 
@@ -22,7 +16,7 @@ export function Sidebar() {
     <div className="flex h-16 items-center border-b border-line px-5">
       <div>
         <div className="text-sm font-semibold tracking-wide text-brand">FeedbackOS Agent</div>
-        <div className="text-xs text-muted">AI 产品需求发现平台</div>
+        <div className="text-xs text-muted">Chat-first Agent Workspace</div>
       </div>
     </div>
     <nav className="space-y-1 p-3">
@@ -32,4 +26,3 @@ export function Sidebar() {
     </nav>
   </aside>;
 }
-

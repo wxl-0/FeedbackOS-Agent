@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes_agent import router as agent_router
+from app.api.routes_conversation import router as conversation_router
 from app.api.routes_clusters import router as clusters_router
 from app.api.routes_evaluation import router as evaluation_router
 from app.api.routes_feedback import router as feedback_router
@@ -46,6 +47,7 @@ def health():
 
 
 app.include_router(upload_router)
+app.include_router(conversation_router)
 app.include_router(feedback_router)
 app.include_router(agent_router)
 app.include_router(clusters_router)

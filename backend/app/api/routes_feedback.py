@@ -9,12 +9,21 @@ router = APIRouter(tags=["feedback"])
 
 
 @router.get("/api/dashboard")
-def dashboard(db: Session = Depends(get_db)):
-    base = dashboard_metrics(db)
-    clusters = db.query(InsightCluster).order_by(InsightCluster.feedback_count.desc()).limit(5).all()
-    opps = db.query(Opportunity).all()
-    prds = db.query(PrdDocument).count()
-    files = db.query(UploadedFile).order_by(UploadedFile.id.desc()).limit(5).all()
+def dashboard(conversation_id: str | None = None, db: Session = Depends(get_db)):
+    base = dashboard_metrics(db, conversation_id=conversation_id)
+    cq = db.query(InsightCluster)
+    oq = db.query(Opportunity)
+    pq = db.query(PrdDocument)
+    fq = db.query(UploadedFile)
+    if conversation_id:
+        cq = cq.filter(InsightCluster.conversation_id == conversation_id)
+        oq = oq.filter(Opportunity.conversation_id == conversation_id)
+        pq = pq.filter(PrdDocument.conversation_id == conversation_id)
+        fq = fq.filter(UploadedFile.conversation_id == conversation_id)
+    clusters = cq.order_by(InsightCluster.feedback_count.desc()).limit(5).all()
+    opps = oq.all()
+    prds = pq.count()
+    files = fq.order_by(UploadedFile.id.desc()).limit(5).all()
     base.update({
         "top_clusters": [{"id": c.id, "name": c.cluster_name, "count": c.feedback_count, "negative_ratio": c.negative_ratio} for c in clusters],
         "high_priority_opportunities": sum(1 for o in opps if o.priority_level == "P0"),
@@ -26,6 +35,5 @@ def dashboard(db: Session = Depends(get_db)):
 
 
 @router.get("/api/feedback")
-def feedback(product_module: str | None = None, sentiment: str | None = None, severity: str | None = None, db: Session = Depends(get_db)):
-    return list_feedback(db, product_module=product_module, sentiment=sentiment, severity=severity)
-
+def feedback(conversation_id: str | None = None, product_module: str | None = None, sentiment: str | None = None, severity: str | None = None, db: Session = Depends(get_db)):
+    return list_feedback(db, conversation_id=conversation_id, product_module=product_module, sentiment=sentiment, severity=severity)

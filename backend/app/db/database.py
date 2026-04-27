@@ -1,4 +1,5 @@
 from sqlalchemy import create_engine
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from app.core.config import get_settings
 
@@ -24,4 +25,29 @@ def init_db() -> None:
     from app.db import models  # noqa
 
     Base.metadata.create_all(bind=engine)
+    ensure_sqlite_columns()
 
+
+def ensure_sqlite_columns() -> None:
+    if not settings.database_url.startswith("sqlite"):
+        return
+    conversation_tables = [
+        "uploaded_files",
+        "data_sources",
+        "feedback_items",
+        "metric_snapshots",
+        "document_chunks",
+        "insight_clusters",
+        "opportunities",
+        "prd_documents",
+        "agent_runs",
+        "project_memory",
+    ]
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        for table in conversation_tables:
+            if table not in inspector.get_table_names():
+                continue
+            columns = {col["name"] for col in inspector.get_columns(table)}
+            if "conversation_id" not in columns:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN conversation_id VARCHAR(80)"))
