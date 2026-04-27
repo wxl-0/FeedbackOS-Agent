@@ -9,10 +9,61 @@ from app.agents.opportunity_agent import generate_opportunities
 from app.agents.prd_writer_agent import generate_prd
 from app.agents.reviewer_agent import review_prd
 from app.agents.state import AgentState
-from app.db.models import AgentRun, AgentStep, ConversationMessage, FeedbackItem, ProjectMemory, UploadedFile
+from app.db.models import AgentRun, AgentStep, ConversationMessage, FeedbackItem, InsightCluster, Opportunity, ProjectMemory, UploadedFile
 from app.services.feedback_service import analyze_feedback_item, serialize_feedback
 from app.services.observability_service import agent_step
 from app.vectorstore.milvus_client import vector_client
+
+
+def build_chat_final_output(db: Session, state: AgentState, project_id: int, conversation_id: str | None) -> str:
+    task = state.get("task", "")
+    reviewer = state.get("reviewer_result") or {}
+    feedback_count = db.query(FeedbackItem).filter_by(project_id=project_id, conversation_id=conversation_id).count()
+    clusters = db.query(InsightCluster).filter_by(project_id=project_id, conversation_id=conversation_id).order_by(InsightCluster.feedback_count.desc()).limit(3).all()
+    opportunities = db.query(Opportunity).filter_by(project_id=project_id, conversation_id=conversation_id).order_by(Opportunity.priority_score.desc()).limit(3).all()
+    selected_opp = db.get(Opportunity, state.get("selected_opportunity_id")) if state.get("selected_opportunity_id") else None
+    prd_title = selected_opp.title if selected_opp else (opportunities[0].title if opportunities else "")
+    quality_score = reviewer.get("quality_score")
+    completeness = reviewer.get("prd_completeness_score")
+    problems = reviewer.get("problems") or []
+
+    if feedback_count == 0:
+        return "我还没有在当前会话里找到可分析的反馈数据。你可以先用输入框右侧的加号上传 CSV、Excel、TXT、MD 或 DOCX 文件，我会先解析入库，再基于当前会话的数据继续分析。"
+
+    task_lower = task.lower()
+    asks_prd = "prd" in task_lower or "需求文档" in task or "产品需求" in task
+    asks_review = "review" in task_lower or "评审" in task or "评分" in task
+    asks_opportunity = "机会" in task or "优先级" in task or "p0" in task_lower
+
+    lines: list[str] = []
+    if asks_review:
+        lines.append(f"我已经完成这版 PRD 的评审。Reviewer 评分是 {quality_score if quality_score is not None else 'N/A'}，完整度是 {completeness if completeness is not None else 'N/A'}。")
+    elif asks_prd:
+        lines.append(f"我已经基于当前会话的 {feedback_count} 条反馈生成了 PRD 草稿：{prd_title or '当前最高优先级机会点'}。你可以在右侧 PRD 面板直接编辑、保存或导出 Markdown/DOCX。")
+    elif asks_opportunity:
+        lines.append(f"我已经从当前会话的 {feedback_count} 条反馈里提炼机会点，并按影响、紧急度、置信度、战略匹配和成本做了优先级评分。")
+    else:
+        lines.append(f"我分析了当前会话的 {feedback_count} 条反馈，并完成了痛点聚类、机会点评估、PRD 草稿和 Reviewer 检查。")
+
+    if clusters:
+        cluster_text = "；".join([f"{c.cluster_name}（{c.feedback_count} 条，负面率 {round((c.negative_ratio or 0) * 100)}%）" for c in clusters])
+        lines.append(f"主要痛点集中在：{cluster_text}。")
+
+    if opportunities:
+        opp_text = "；".join([f"{o.priority_level} {o.title}（{round(o.priority_score, 2)}）" for o in opportunities])
+        lines.append(f"优先处理建议：{opp_text}。")
+
+    if prd_title and not asks_prd:
+        lines.append(f"我也生成了一版 PRD 草稿：{prd_title}，右侧 PRD 面板可以继续调整。")
+
+    if quality_score is not None:
+        lines.append(f"Reviewer 当前评分：{quality_score}。")
+    if problems:
+        lines.append(f"需要注意：{problems[0]}")
+    else:
+        lines.append("目前没有发现明显的结构性缺口，但建议你人工确认业务假设和上线范围。")
+
+    return "\n".join(lines)
 
 
 async def run_agent_workflow(db: Session, task: str, project_id: int = 1, user_id: str = "local_user", conversation_id: str | None = None) -> AgentState:
@@ -103,7 +154,7 @@ async def run_agent_workflow(db: Session, task: str, project_id: int = 1, user_i
     async def final_compression(state: AgentState) -> AgentState:
         step_summaries = [s.step_summary or "" for s in db.query(AgentStep).filter_by(run_id=run.id).order_by(AgentStep.id).all()]
         conversation_summary = compress_steps(db, run.id, step_summaries)
-        final_output = f"已完成分析：生成聚类、机会点和 PRD 草稿。Reviewer 评分：{state.get('reviewer_result', {}).get('quality_score', 'N/A')}。"
+        final_output = build_chat_final_output(db, state, project_id, conversation_id)
         return {**state, "conversation_summary": conversation_summary, "final_output": final_output}
 
     graph = StateGraph(AgentState)
