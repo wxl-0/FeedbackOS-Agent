@@ -20,19 +20,18 @@ def mock_embedding(text: str, dim: int = DIM) -> list[float]:
 
 async def embed_text(text: str) -> list[float]:
     settings = get_settings()
-    if settings.use_mock_llm or not settings.openai_api_key:
+    if settings.use_mock_llm or not settings.llm_api_key:
         return mock_embedding(text)
     try:
         import httpx
 
         async with httpx.AsyncClient(timeout=20) as client:
             res = await client.post(
-                f"{settings.openai_base_url.rstrip('/')}/embeddings",
-                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
-                json={"model": settings.embedding_model, "input": text[:8000]},
+                f"{settings.resolved_base_url.rstrip('/')}/embeddings",
+                headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+                json={"model": settings.resolved_embedding_model, "input": text[:8000]},
             )
             res.raise_for_status()
             return res.json()["data"][0]["embedding"]
     except Exception:
         return mock_embedding(text)
-

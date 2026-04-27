@@ -1,7 +1,9 @@
 import json
 import time
 from typing import Any
+
 from sqlalchemy.orm import Session
+
 from app.core.config import get_settings
 from app.db.models import LlmCall
 
@@ -17,6 +19,33 @@ MODULE_RULES = [
 ]
 
 
+PROMPTS = {
+    "feedback_classification": """你是产品反馈分析 Agent。只能基于输入 text 输出 JSON：
+{
+  "sentiment": "positive|neutral|negative",
+  "product_module": "登录|支付|AI 回复|新手引导|性能|会员|搜索|其他",
+  "issue_type": "Bug|体验问题|新需求|投诉|咨询",
+  "severity": "low|medium|high",
+  "summary": "一句话摘要"
+}
+不要输出 Markdown，不要添加无依据信息。""",
+    "review": """你是 PRD Reviewer Agent。只能基于输入 PRD 和证据引用输出 JSON：
+{
+  "quality_score": 0-100,
+  "prd_completeness_score": 0-100,
+  "evidence_coverage_score": 0-100,
+  "problems": ["问题"],
+  "suggestions": ["建议"],
+  "hallucination_risk": "low|medium|high",
+  "need_human_review": true
+}
+重点检查真实 evidence、无依据数字、可测试验收标准、指标设计和 PRD 完整度。""",
+    "compression": "你是上下文压缩节点。只基于输入内容输出 JSON：{\"summary\":\"压缩摘要\",\"key_points\":[\"要点\"]}。",
+    "prd": "你是 PRD Writer Agent。只基于 opportunity、evidence_summary、metric_summary 和 evidence 输出 JSON：{\"prd_markdown\":\"完整中文 Markdown PRD\"}。",
+    "default": "Return concise valid JSON only. Use only provided evidence.",
+}
+
+
 def estimate_tokens(text: str) -> int:
     return max(1, len(text) // 2)
 
@@ -24,7 +53,7 @@ def estimate_tokens(text: str) -> int:
 def classify_text(text: str) -> dict[str, Any]:
     module = "其他"
     for name, words in MODULE_RULES:
-        if any(w.lower() in text.lower() for w in words):
+        if any(word.lower() in text.lower() for word in words):
             module = name
             break
     negative_words = ["差", "慢", "失败", "不能", "无法", "崩溃", "投诉", "退款", "答非所问", "卡"]
@@ -94,73 +123,81 @@ def prd_markdown(opportunity: dict[str, Any], evidence: list[dict[str, Any]], me
 """
 
 
+async def _call_openai_compatible(settings, prompt_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+    import httpx
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        res = await client.post(
+            f"{settings.resolved_base_url.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+            json={
+                "model": settings.resolved_model,
+                "messages": [
+                    {"role": "system", "content": PROMPTS.get(prompt_type, PROMPTS["default"])},
+                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                ],
+                "temperature": 0.2,
+                "response_format": {"type": "json_object"},
+            },
+        )
+        res.raise_for_status()
+        content = res.json()["choices"][0]["message"]["content"]
+        return json.loads(content)
+
+
+def _mock_result(prompt_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+    text = payload.get("text") or payload.get("task") or json.dumps(payload, ensure_ascii=False)
+    if prompt_type == "review":
+        prd = payload.get("prd_markdown", "")
+        required = ["背景与问题", "目标用户", "用户故事", "需求范围", "功能流程", "验收标准", "埋点指标", "风险点", "证据引用"]
+        completeness = int(sum(1 for item in required if item in prd) / len(required) * 100)
+        evidence = 100 if "#" in prd else 40
+        return {
+            "quality_score": int((completeness + evidence) / 2),
+            "prd_completeness_score": completeness,
+            "evidence_coverage_score": evidence,
+            "problems": [] if evidence >= 80 else ["证据引用不足"],
+            "suggestions": ["保持每个结论可追溯到 feedback evidence"],
+            "hallucination_risk": "low" if evidence >= 80 else "medium",
+            "need_human_review": True,
+        }
+    if prompt_type == "compression":
+        return {"summary": text[:500], "key_points": text[:500].split("。")[:5]}
+    if prompt_type == "prd":
+        return {"prd_markdown": prd_markdown(payload.get("opportunity", {}), payload.get("evidence", []), payload.get("metric_summary", ""))}
+    return classify_text(text)
+
+
 async def call_llm(db: Session, agent_name: str, prompt_type: str, payload: dict[str, Any], run_id: int | None = None) -> dict[str, Any]:
     settings = get_settings()
     start = time.perf_counter()
     success = True
     json_ok = True
     error = None
-    result: dict[str, Any]
+    used_real_llm = settings.real_llm_enabled
     try:
-        if settings.real_llm_enabled:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=40) as client:
-                res = await client.post(
-                    f"{settings.openai_base_url.rstrip('/')}/chat/completions",
-                    headers={"Authorization": f"Bearer {settings.openai_api_key}"},
-                    json={
-                        "model": settings.openai_model,
-                        "messages": [
-                            {"role": "system", "content": "Return concise valid JSON only. Use only provided evidence."},
-                            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-                        ],
-                        "temperature": 0.2,
-                    },
-                )
-                res.raise_for_status()
-                content = res.json()["choices"][0]["message"]["content"]
-                try:
-                    result = json.loads(content)
-                except Exception:
-                    json_ok = False
-                    result = {"text": content}
+        if used_real_llm:
+            result = await _call_openai_compatible(settings, prompt_type, payload)
         else:
-            text = payload.get("text") or payload.get("task") or json.dumps(payload, ensure_ascii=False)
-            result = classify_text(text)
-            if prompt_type == "review":
-                prd = payload.get("prd_markdown", "")
-                required = ["背景与问题", "目标用户", "用户故事", "需求范围", "功能流程", "验收标准", "埋点指标", "风险点", "证据引用"]
-                completeness = int(sum(1 for item in required if item in prd) / len(required) * 100)
-                evidence = 100 if "#" in prd else 40
-                result = {
-                    "quality_score": int((completeness + evidence) / 2),
-                    "prd_completeness_score": completeness,
-                    "evidence_coverage_score": evidence,
-                    "problems": [] if evidence >= 80 else ["证据引用不足"],
-                    "suggestions": ["保持每个结论可追溯到 feedback evidence"],
-                    "hallucination_risk": "low" if evidence >= 80 else "medium",
-                    "need_human_review": True,
-                }
-            elif prompt_type == "compression":
-                result = {"summary": text[:500], "key_points": text[:500].split("。")[:5]}
+            result = _mock_result(prompt_type, payload)
     except Exception as exc:
         success = False
         json_ok = False
         error = str(exc)
-        result = {"error": error}
+        result = _mock_result(prompt_type, payload)
+
     latency = int((time.perf_counter() - start) * 1000)
     raw_in = json.dumps(payload, ensure_ascii=False)
     raw_out = json.dumps(result, ensure_ascii=False)
     db.add(LlmCall(
         run_id=run_id,
         agent_name=agent_name,
-        model_name=settings.openai_model if settings.real_llm_enabled else "mock-llm",
+        model_name=settings.resolved_model if used_real_llm else "mock-llm",
         prompt_type=prompt_type,
         input_tokens=estimate_tokens(raw_in),
         output_tokens=estimate_tokens(raw_out),
         latency_ms=latency,
-        cost_estimate=0 if not settings.real_llm_enabled else estimate_tokens(raw_in + raw_out) * 0.000001,
+        cost_estimate=0 if not used_real_llm else estimate_tokens(raw_in + raw_out) * 0.000001,
         cache_hit=False,
         success=success,
         json_parse_success=json_ok,
@@ -168,4 +205,3 @@ async def call_llm(db: Session, agent_name: str, prompt_type: str, payload: dict
     ))
     db.commit()
     return result
-

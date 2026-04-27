@@ -37,7 +37,12 @@ def startup():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "mock_llm": settings.use_mock_llm or not settings.openai_api_key}
+    return {
+        "status": "ok",
+        "mock_llm": not settings.real_llm_enabled,
+        "real_llm_enabled": settings.real_llm_enabled,
+        "model": settings.resolved_model if settings.real_llm_enabled else "mock-llm",
+    }
 
 
 app.include_router(upload_router)
@@ -48,4 +53,3 @@ app.include_router(opportunities_router)
 app.include_router(prd_router)
 app.include_router(memory_router)
 app.include_router(evaluation_router)
-

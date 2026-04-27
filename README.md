@@ -156,16 +156,18 @@ OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o-mini
 EMBEDDING_MODEL=text-embedding-3-small
-USE_MOCK_LLM=true
+USE_MOCK_LLM=false
 DATABASE_URL=sqlite:///./storage/feedbackos.db
 REDIS_URL=redis://localhost:6379/0
 MILVUS_LITE_PATH=./storage/milvus_lite.db
 FRONTEND_ORIGIN=http://localhost:3000
 ```
 
-没有真实 API Key 或 `USE_MOCK_LLM=true` 时，系统使用 Mock LLM 与 mock embedding。Mock LLM 用于本地开发、演示兜底和流程回归测试，结果只基于上传解析后的反馈、指标、文档片段、用户任务和 SQLite 已有数据。
+默认优先调用真实 OpenAI-compatible 模型。没有真实 API Key 或显式设置 `USE_MOCK_LLM=true` 时，系统使用 Mock LLM 与 mock embedding。Mock LLM 用于本地开发、演示兜底和流程回归测试，结果只基于上传解析后的反馈、指标、文档片段、用户任务和 SQLite 已有数据。
 
 有真实 API Key 时，将 `USE_MOCK_LLM=false` 即可调用 OpenAI 兼容 API。
+
+如果你使用 DashScope 兼容模式，也可以只配置 `DASHSCOPE_API_KEY`；未显式配置 `OPENAI_BASE_URL` 时，后端会自动使用 `https://dashscope.aliyuncs.com/compatible-mode/v1`。Anthropic 原生 API 不属于 OpenAI-compatible 接口，本项目当前不会直接用 `ANTHROPIC_API_KEY` 调用。
 
 ## 文件上传格式
 
