@@ -15,6 +15,39 @@ from app.services.observability_service import agent_step
 from app.vectorstore.milvus_client import vector_client
 
 
+TARGET_KEYWORDS = {
+    "支付": ["支付", "付款", "扣费", "退款", "验证码", "付费", "订单"],
+    "AI 回复": ["ai", "AI", "回复", "答非所问", "机器人", "模型"],
+    "会员": ["会员", "权益", "收费", "订阅", "试用"],
+    "搜索": ["搜索", "找不到", "模板", "检索"],
+    "新手引导": ["新手", "引导", "不会用", "教程", "上手"],
+    "性能": ["性能", "卡", "慢", "加载", "闪退", "崩溃"],
+    "登录": ["登录", "注册", "密码", "账号", "验证码"],
+}
+
+
+def select_opportunity_for_task(task: str, opportunities: list[Opportunity]) -> Opportunity | None:
+    if not opportunities:
+        return None
+    task_lower = task.lower()
+
+    def match_score(opp: Opportunity) -> float:
+        haystack = f"{opp.title} {opp.problem_statement} {opp.target_user}".lower()
+        score = opp.priority_score or 0
+        for module, words in TARGET_KEYWORDS.items():
+            module_hit = any(word.lower() in task_lower for word in words)
+            if module_hit and module.lower() in haystack:
+                score += 1000
+            elif module_hit and any(word.lower() in haystack for word in words):
+                score += 800
+        for token in ["支付", "会员", "搜索", "登录", "性能", "新手", "AI", "ai", "回复"]:
+            if token.lower() in task_lower and token.lower() in haystack:
+                score += 500
+        return score
+
+    return sorted(opportunities, key=match_score, reverse=True)[0]
+
+
 def build_chat_final_output(db: Session, state: AgentState, project_id: int, conversation_id: str | None) -> str:
     task = state.get("task", "")
     reviewer = state.get("reviewer_result") or {}
@@ -126,9 +159,12 @@ async def run_agent_workflow(db: Session, task: str, project_id: int = 1, user_i
     async def opportunity(state: AgentState) -> AgentState:
         with agent_step(db, run.id, "Opportunity Agent", "score_opportunities", "priority_formula") as out:
             opps = generate_opportunities(db, project_id, conversation_id)
+            selected_opp = select_opportunity_for_task(state["task"], opps)
             top = sorted(opps, key=lambda x: x.priority_score, reverse=True)
-            selected = top[0].id if top else None
-            out["step_summary"] = f"生成 {len(opps)} 个机会点，最高优先级为 {top[0].priority_level if top else 'N/A'}。"
+            selected = selected_opp.id if selected_opp else None
+            selected_title = selected_opp.title if selected_opp else "N/A"
+            out["selected_opportunity_id"] = selected
+            out["step_summary"] = f"生成 {len(opps)} 个机会点；根据用户问题选择生成 PRD 的机会点：{selected_title}。"
         return {**state, "selected_opportunity_id": selected}
 
     async def compression(state: AgentState) -> AgentState:

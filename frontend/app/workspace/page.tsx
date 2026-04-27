@@ -138,7 +138,7 @@ export default function WorkspacePage() {
 
       <section className="card flex min-h-0 flex-col overflow-hidden">
         <div className="border-b border-line p-4">
-          <h1 className="text-lg font-semibold">Agent Workspace</h1>
+          <h1 className="text-lg font-semibold">FeedBackOS</h1>
         </div>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
@@ -217,8 +217,7 @@ function FeedbackPanel({ items }: { items: any[] }) {
     {filtered.length === 0 && <p className="rounded-md border border-dashed border-line p-6 text-center text-sm text-muted">没有匹配当前情绪条件的反馈。</p>}
     <div className="grid grid-cols-2 gap-3">{filtered.map((item) => (
       <article key={item.id} className="rounded-md border border-line p-3">
-        <p className="text-sm leading-6">{item.feedback_text}</p>
-        <p className="mt-2 text-xs text-muted">{item.feedback_summary}</p>
+        <p className="line-clamp-2 text-sm leading-6">{item.feedback_summary || item.feedback_text}</p>
         <div className="mt-2 flex flex-wrap gap-2">
           <span className="badge">{item.product_module}</span>
           <span className="badge">{item.sentiment_label}</span>
@@ -246,44 +245,65 @@ function ClusterPanel({ clusters }: { clusters: any[] }) {
 }
 
 function PrdPanel({ prds, reviewer, onSaved }: { prds: any[]; reviewer?: any; onSaved: () => void }) {
-  const latest = prds[0];
+  const [selectedId, setSelectedId] = useState<number | undefined>();
+  const selected = prds.find((prd) => prd.id === selectedId) || prds[0];
   const [text, setText] = useState("");
-  useEffect(() => { setText(latest?.prd_markdown || ""); }, [latest?.id, latest?.prd_markdown]);
+  useEffect(() => {
+    if (prds[0]?.id && !selectedId) setSelectedId(prds[0].id);
+  }, [prds, selectedId]);
+  useEffect(() => { setText(selected?.prd_markdown || ""); }, [selected?.id, selected?.prd_markdown]);
 
-  if (!latest) return <p className="text-sm text-muted">当前会话还没有 PRD 草稿。</p>;
+  if (!selected) return <p className="text-sm text-muted">当前会话还没有 PRD 草稿。你可以在聊天里说“写一份针对支付体验痛点的 PRD”。</p>;
 
   function exportMarkdown() {
     const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${latest.title || "prd"}.md`;
+    a.download = `${selected.title || "prd"}.md`;
     a.click();
     window.URL.revokeObjectURL(url);
   }
 
   async function save() {
-    await api.updatePrd(latest.id, text);
+    await api.updatePrd(selected.id, text);
     onSaved();
   }
 
-  return <div className="space-y-3">
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div>
-        <div className="font-semibold">{latest.title}</div>
-        <div className="text-xs text-muted">{latest.version} · {latest.status}</div>
+  return <div className="grid min-h-[650px] grid-cols-[260px_minmax(0,1fr)] gap-3">
+    <aside className="rounded-md border border-line bg-slate-50 p-3">
+      <div className="mb-3 text-sm font-semibold">历史 PRD</div>
+      <div className="space-y-2">
+        {prds.map((prd) => (
+          <button
+            key={prd.id}
+            className={`w-full rounded-md border p-3 text-left text-sm hover:bg-white ${selected.id === prd.id ? "border-brand bg-white text-brand" : "border-line bg-white/70 text-ink"}`}
+            onClick={() => setSelectedId(prd.id)}
+          >
+            <div className="line-clamp-2 font-medium">{prd.title}</div>
+            <div className="mt-1 text-xs text-muted">#{prd.id} · {prd.version} · {prd.status}</div>
+          </button>
+        ))}
       </div>
-      <div className="flex flex-wrap gap-2">
-        <button className="btn" onClick={save}><Save size={14} />保存</button>
-        <button className="btn" onClick={exportMarkdown}><Download size={14} />Markdown</button>
-        <button className="btn" onClick={() => api.exportPrdDocx(latest.title, text)}><FileText size={14} />DOCX</button>
+    </aside>
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="font-semibold">{selected.title}</div>
+          <div className="text-xs text-muted">#{selected.id} · {selected.version} · {selected.status}</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button className="btn" onClick={save}><Save size={14} />保存</button>
+          <button className="btn" onClick={exportMarkdown}><Download size={14} />Markdown</button>
+          <button className="btn" onClick={() => api.exportPrdDocx(selected.title, text)}><FileText size={14} />DOCX</button>
+        </div>
       </div>
-    </div>
-    {reviewer && <div className="rounded-md border border-line bg-slate-50 p-3 text-sm">
-      <div className="font-medium">Reviewer 评分：{reviewer.quality_score ?? 0}</div>
-      <div className="mt-1 text-xs text-muted">完整度 {reviewer.prd_completeness_score ?? 0} · 风险 {reviewer.hallucination_risk || "unknown"}</div>
-    </div>}
-    <textarea className="min-h-[620px] w-full resize-y rounded-md border border-line bg-white p-3 font-mono text-sm leading-6 outline-none focus:border-brand" value={text} onChange={(e) => setText(e.target.value)} />
+      {reviewer && selected.id === prds[0]?.id && <div className="rounded-md border border-line bg-slate-50 p-3 text-sm">
+        <div className="font-medium">最新 Reviewer 评分：{reviewer.quality_score ?? 0}</div>
+        <div className="mt-1 text-xs text-muted">完整度 {reviewer.prd_completeness_score ?? 0} · 风险 {reviewer.hallucination_risk || "unknown"}</div>
+      </div>}
+      <textarea className="min-h-[620px] w-full resize-y rounded-md border border-line bg-white p-3 font-mono text-sm leading-6 outline-none focus:border-brand" value={text} onChange={(e) => setText(e.target.value)} />
+    </section>
   </div>;
 }
 
