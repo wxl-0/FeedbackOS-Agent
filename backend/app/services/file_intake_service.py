@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -57,15 +58,88 @@ def read_text(path: Path) -> str:
         return path.read_text(encoding="gbk", errors="ignore")
 
 
+SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？.!?])\s*")
+MARKDOWN_HEADING_RE = re.compile(r"^#{1,6}\s+")
+
+
+def _split_long_unit(text: str, size: int) -> list[str]:
+    if len(text) <= size:
+        return [text]
+    sentences = [item.strip() for item in SENTENCE_SPLIT_RE.split(text) if item.strip()]
+    if len(sentences) <= 1:
+        return [text[i:i + size].strip() for i in range(0, len(text), size) if text[i:i + size].strip()]
+
+    units: list[str] = []
+    current = ""
+    for sentence in sentences:
+        if len(sentence) > size:
+            if current:
+                units.append(current.strip())
+                current = ""
+            units.extend([sentence[i:i + size].strip() for i in range(0, len(sentence), size) if sentence[i:i + size].strip()])
+            continue
+        if current and len(current) + len(sentence) + 1 > size:
+            units.append(current.strip())
+            current = sentence
+        else:
+            current = f"{current} {sentence}".strip()
+    if current:
+        units.append(current.strip())
+    return units
+
+
+def _semantic_units(text: str, size: int) -> list[str]:
+    blocks: list[str] = []
+    current: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            if current:
+                blocks.append("\n".join(current).strip())
+                current = []
+            continue
+        if MARKDOWN_HEADING_RE.match(line):
+            if current:
+                blocks.append("\n".join(current).strip())
+            current = [line]
+            continue
+        current.append(line)
+    if current:
+        blocks.append("\n".join(current).strip())
+
+    units: list[str] = []
+    for block in blocks:
+        units.extend(_split_long_unit(block, size))
+    return [unit for unit in units if unit]
+
+
+def _overlap_tail(text: str, overlap: int) -> str:
+    if overlap <= 0 or len(text) <= overlap:
+        return text if overlap > 0 else ""
+    tail = text[-overlap:]
+    boundary = max(tail.rfind("\n"), tail.rfind("。"), tail.rfind("！"), tail.rfind("？"), tail.rfind("."), tail.rfind("!"), tail.rfind("?"))
+    if boundary > overlap // 3:
+        return tail[boundary + 1:].strip()
+    return tail.strip()
+
+
 def chunk_text(text: str, size: int = 900, overlap: int = 120) -> list[str]:
-    clean = "\n".join(line.strip() for line in text.splitlines() if line.strip())
-    chunks = []
-    i = 0
-    while i < len(clean):
-        chunk = clean[i:i + size].strip()
-        if chunk:
-            chunks.append(chunk)
-        i += size - overlap
+    units = _semantic_units(text, size)
+    chunks: list[str] = []
+    current = ""
+    for unit in units:
+        candidate = f"{current}\n\n{unit}".strip() if current else unit
+        if current and len(candidate) > size:
+            chunks.append(current.strip())
+            tail = _overlap_tail(current, overlap)
+            current = f"{tail}\n\n{unit}".strip() if tail else unit
+            if len(current) > size + overlap:
+                chunks.extend(_split_long_unit(current, size))
+                current = ""
+        else:
+            current = candidate
+    if current:
+        chunks.append(current.strip())
     return chunks
 
 
