@@ -2,26 +2,17 @@
 
 FeedBackOS 是一个面向产品经理的 Chat-first AI 需求发现工作台。用户在一个聊天会话中上传客服工单、App 评论、用户访谈纪要、NPS 开放题、业务指标表、历史 PRD 或版本复盘文件，系统会先完成解析、清洗、结构化入库和向量化，再通过 LangGraph Agent workflow 进行反馈分析、痛点聚类、机会点评估、PRD 生成和 Reviewer 质量评审。
 
-项目不内置业务 demo 数据，不提供 Seed Demo Data 按钮。所有业务数据都来自用户上传文件或用户输入。LLM 不接收完整原始文件，只接收经过结构化入库、检索和上下文压缩后的相关证据。API Key 只从后端环境变量读取，前端不保存、不硬编码密钥。
 
 ## 当前产品形态
+<img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/57d6456d-e55a-43fc-99a7-75ba02369be2" />
+<img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/3b856340-ca4a-47f1-af37-b77bd1d578d1" />
+<img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/1380e5b7-4fae-4847-b77b-251e49fcfa02" />
+<img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/ce53cd28-5e3c-4957-9358-1b18c839bd84" />
+<img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/86c33c05-905c-4cd4-b6f3-9f0205ee75c2" />
 
-前端主入口是 `Agent Workspace`，目前已经收敛为单页工作台：
 
-- 左侧：可隐藏的会话历史，只展示会话名称和最后更新时间。
-- 中间：聊天输入区，支持在发送按钮旁通过加号上传文件。
-- 右侧：分析工作区，通过 Tab 展示当前会话的数据与结果。
-- 每个会话都有独立 `conversation_id`，上传文件、反馈、指标、PRD 和 Agent run 都绑定当前会话。
-- Agent 每次只分析当前 `conversation_id` 下的数据，不默认分析全库。
 
-右侧 Tab 包括：
 
-- 当前文件：展示当前会话上传文件、解析状态、入库状态和向量化状态。
-- Feedback Inbox：展示当前会话反馈列表，支持情绪下拉筛选。
-- Insight Cluster：展示痛点聚类。
-- PRD：展示历史 PRD 列表，支持切换、编辑、保存、导出 Markdown 和 DOCX。
-- Reviewer：展示综合评分、证据覆盖、问题和建议。
-- Evaluation：展示当前会话的 Agent、LLM、证据、Reviewer 和上下文压缩指标。
 
 ## 核心能力
 
