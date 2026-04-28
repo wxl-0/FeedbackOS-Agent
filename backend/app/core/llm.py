@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.context_builder import ContextBuilder, estimate_tokens
 from app.core.prompt_loader import get_system_prompt
 from app.db.models import LlmCall
 
@@ -32,10 +33,6 @@ REQUIRED_PRD_SECTIONS = [
 ]
 
 FORBIDDEN_PRD_SECTIONS = ["## 证据引用", "## 指标摘要", "evidence id", "证据ID"]
-
-
-def estimate_tokens(text: str) -> int:
-    return max(1, len(text) // 2)
 
 
 def classify_text(text: str) -> dict[str, Any]:
@@ -162,6 +159,7 @@ def _mock_result(prompt_type: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 async def call_llm(db: Session, agent_name: str, prompt_type: str, payload: dict[str, Any], run_id: int | None = None) -> dict[str, Any]:
     settings = get_settings()
+    llm_payload = ContextBuilder(db, run_id, prompt_type).build(payload)
     start = time.perf_counter()
     success = True
     json_ok = True
@@ -169,17 +167,17 @@ async def call_llm(db: Session, agent_name: str, prompt_type: str, payload: dict
     used_real_llm = settings.real_llm_enabled
     try:
         if used_real_llm:
-            result = await _call_openai_compatible(settings, prompt_type, payload)
+            result = await _call_openai_compatible(settings, prompt_type, llm_payload)
         else:
-            result = _mock_result(prompt_type, payload)
+            result = _mock_result(prompt_type, llm_payload)
     except Exception as exc:
         success = False
         json_ok = False
         error = str(exc)
-        result = _mock_result(prompt_type, payload)
+        result = _mock_result(prompt_type, llm_payload)
 
     latency = int((time.perf_counter() - start) * 1000)
-    raw_in = json.dumps(payload, ensure_ascii=False)
+    raw_in = json.dumps(llm_payload, ensure_ascii=False)
     raw_out = json.dumps(result, ensure_ascii=False)
     db.add(LlmCall(
         run_id=run_id,

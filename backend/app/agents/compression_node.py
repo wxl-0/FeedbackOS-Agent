@@ -1,6 +1,6 @@
 import json
 from sqlalchemy.orm import Session
-from app.core.llm import estimate_tokens
+from app.core.context_builder import estimate_tokens
 from app.db.models import CompressionLog
 
 
@@ -32,4 +32,3 @@ def compress_steps(db: Session, run_id: int | None, steps: list[str]) -> str:
     db.add(CompressionLog(run_id=run_id, compression_type="step_summary", original_tokens=ot, compressed_tokens=ct, compression_rate=1 - ct / max(1, ot), summary_text=summary))
     db.commit()
     return summary
-

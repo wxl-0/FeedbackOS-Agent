@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     use_milvus: bool = False
     milvus_uri: str | None = None
     milvus_lite_path: str = "./storage/milvus_lite.db"
+    max_context_tokens: int = 6000
+    context_reserved_output_tokens: int = 1500
     frontend_origin: str = "http://localhost:3000"
     upload_dir: Path = Path("uploads")
     export_dir: Path = Path("storage/exports")

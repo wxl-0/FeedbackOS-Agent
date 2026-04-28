@@ -215,6 +215,8 @@ REDIS_URL=redis://localhost:6379/0
 USE_MILVUS=false
 MILVUS_URI=
 MILVUS_LITE_PATH=./storage/milvus_lite.db
+MAX_CONTEXT_TOKENS=6000
+CONTEXT_RESERVED_OUTPUT_TOKENS=1500
 FRONTEND_ORIGIN=http://localhost:3000
 ```
 
@@ -239,6 +241,13 @@ MILVUS_URI=http://localhost:19530
 ```
 
 如果 Milvus 初始化、写入或检索失败，系统会自动回退到内存向量检索，保证上传、分析和 PRD 生成流程不中断。
+
+上下文窗口由后端统一控制：
+
+- `MAX_CONTEXT_TOKENS`：单次 LLM 调用的上下文预算。
+- `CONTEXT_RESERVED_OUTPUT_TOKENS`：为模型输出预留的 token 数。
+- LLM 调用前会先经过 `ContextBuilder`，只发送结构化数据、检索证据和摘要，不发送完整原始文件。
+- 如果 payload 超过预算，系统会裁剪证据列表、压缩历史消息、截断长文本，并写入 `compression_logs`。
 
 
 ## 项目结构
