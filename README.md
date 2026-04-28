@@ -54,6 +54,7 @@ AI 与检索：
 - YAML Prompt 管理
 - Mock LLM
 - Mock embedding
+- Milvus / Milvus Lite 可选
 - In-memory fallback vector store
 - Redis 可选
 
@@ -211,6 +212,8 @@ USE_MOCK_LLM=false
 
 DATABASE_URL=sqlite:///./storage/feedbackos.db
 REDIS_URL=redis://localhost:6379/0
+USE_MILVUS=false
+MILVUS_URI=
 MILVUS_LITE_PATH=./storage/milvus_lite.db
 FRONTEND_ORIGIN=http://localhost:3000
 ```
@@ -220,6 +223,22 @@ FRONTEND_ORIGIN=http://localhost:3000
 ```env
 USE_MOCK_LLM=true
 ```
+
+默认情况下，向量检索使用内存 fallback，适合本地快速演示。要切换到 Milvus Lite：
+
+```env
+USE_MILVUS=true
+MILVUS_LITE_PATH=./storage/milvus_lite.db
+```
+
+要连接独立 Milvus 服务：
+
+```env
+USE_MILVUS=true
+MILVUS_URI=http://localhost:19530
+```
+
+如果 Milvus 初始化、写入或检索失败，系统会自动回退到内存向量检索，保证上传、分析和 PRD 生成流程不中断。
 
 
 ## 项目结构
@@ -277,4 +296,3 @@ feedbackos-agent/
 ```
 
 7. 查看 `Insight Cluster`、`PRD`、`Reviewer` 和 `Evaluation` 面板。
-

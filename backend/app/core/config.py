@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     use_mock_llm: bool = False
     database_url: str = "sqlite:///./storage/feedbackos.db"
     redis_url: str = "redis://localhost:6379/0"
+    use_milvus: bool = False
+    milvus_uri: str | None = None
     milvus_lite_path: str = "./storage/milvus_lite.db"
     frontend_origin: str = "http://localhost:3000"
     upload_dir: Path = Path("uploads")
@@ -63,6 +65,10 @@ class Settings(BaseSettings):
     @property
     def real_llm_enabled(self) -> bool:
         return bool(self.llm_api_key) and not self.use_mock_llm
+
+    @property
+    def resolved_milvus_uri(self) -> str:
+        return self.milvus_uri or self.milvus_lite_path
 
 
 @lru_cache
