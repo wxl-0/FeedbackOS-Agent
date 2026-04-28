@@ -1,4 +1,4 @@
-# FeedBackOS
+# FeedbackOS Agent｜AI 产品经理需求发现智能体
 
 FeedBackOS 是一个面向产品经理的 Chat-first AI 需求发现工作台。用户在一个聊天会话中上传客服工单、App 评论、用户访谈纪要、NPS 开放题、业务指标表、历史 PRD 或版本复盘文件，系统会先完成解析、清洗、结构化入库和向量化，再通过 LangGraph Agent workflow 进行反馈分析、痛点聚类、机会点评估、PRD 生成和 Reviewer 质量评审。
 
