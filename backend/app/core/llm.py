@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.prompt_loader import get_system_prompt
 from app.db.models import LlmCall
 
 
@@ -18,59 +19,19 @@ MODULE_RULES = [
     ("登录", ["登录", "注册", "密码", "账号"]),
 ]
 
+REQUIRED_PRD_SECTIONS = [
+    "## 1. 背景与问题",
+    "## 2. 目标用户",
+    "## 3. 用户故事",
+    "## 4. 需求范围",
+    "## 5. 功能流程",
+    "## 6. 验收标准",
+    "## 7. 埋点指标",
+    "## 8. 风险点",
+    "## 9. 后续迭代建议",
+]
 
-PROMPTS = {
-    "feedback_classification": """你是产品反馈分析 Agent。只能基于输入 text 输出 JSON：
-{
-  "sentiment": "positive|neutral|negative",
-  "product_module": "登录|支付|AI 回复|新手引导|性能|会员|搜索|其他",
-  "issue_type": "Bug|体验问题|新需求|投诉|咨询",
-  "severity": "low|medium|high",
-  "summary": "一句话摘要"
-}
-不要输出 Markdown，不要添加无依据信息。""",
-    "review": """你是 PRD Reviewer Agent。只能基于输入 PRD 输出 JSON：
-{
-  "quality_score": 0-100,
-  "prd_completeness_score": 0-100,
-  "evidence_coverage_score": 0-100,
-  "problems": ["问题"],
-  "suggestions": ["建议"],
-  "hallucination_risk": "low|medium|high",
-  "need_human_review": true
-}
-重点检查无依据数字、可测试验收标准、指标设计和 PRD 完整度。不要要求 PRD 正文包含“证据引用”章节。""",
-    "compression": "你是上下文压缩节点。只基于输入内容输出 JSON：{\"summary\":\"压缩摘要\",\"key_points\":[\"要点\"]}。",
-    "prd": """你是 PRD Writer Agent。只能基于输入的 opportunity、metric_summary 和 evidence 生成 PRD。
-必须输出 JSON：{"prd_markdown":"完整 Markdown PRD"}。
-
-PRD Markdown 必须且只能包含以下 9 个一级内容章节：
-# {机会点标题}
-
-## 1. 背景与问题
-## 2. 目标用户
-## 3. 用户故事
-## 4. 需求范围
-## 5. 功能流程
-## 6. 验收标准
-## 7. 埋点指标
-## 8. 风险点
-## 9. 后续迭代建议
-
-禁止包含：
-- 证据引用章节
-- 指标摘要章节
-- evidence id
-- 额外章节
-- 没有依据的具体数字
-
-要求：
-- 每个章节都要有实质内容。
-- 验收标准必须可测试。
-- 埋点指标必须可落地。
-- 不要把证据原文或 evidence_id 写入 PRD 正文。""",
-    "default": "Return concise valid JSON only. Use only provided evidence.",
-}
+FORBIDDEN_PRD_SECTIONS = ["## 证据引用", "## 指标摘要", "evidence id", "证据ID"]
 
 
 def estimate_tokens(text: str) -> int:
@@ -86,12 +47,15 @@ def classify_text(text: str) -> dict[str, Any]:
     negative_words = [
         "差", "慢", "失败", "不能", "无法", "崩溃", "投诉", "退款", "答非所问", "卡",
         "收不到", "放弃", "找不到", "无关", "不准", "不好", "不清楚", "忘记", "过期",
-        "不太", "没有结果", "扣费", "闪退", "报错", "卡住", "加载"
+        "不太", "没有结果", "扣费", "闪退", "报错", "卡住", "加载", "不明显", "被扣费",
     ]
-    positive_words = ["好", "喜欢", "满意", "顺畅", "方便"]
+    positive_words = ["好", "喜欢", "满意", "顺畅", "方便", "清楚", "稳定"]
     sentiment = "negative" if any(w in text for w in negative_words) else "positive" if any(w in text for w in positive_words) else "neutral"
-    severity = "high" if any(w in text for w in ["崩溃", "退款", "失败", "无法", "投诉", "放弃购买"]) else "medium" if sentiment == "negative" else "low"
-    issue_type = "Bug" if any(w in text for w in ["崩溃", "闪退", "报错", "失败"]) else "新需求" if any(w in text for w in ["希望", "想要", "建议", "能否"]) else "投诉" if sentiment == "negative" else "咨询"
+    high_words = ["崩溃", "退款", "失败", "无法", "投诉", "放弃购买", "扣费", "被扣费"]
+    bug_words = ["崩溃", "闪退", "报错", "失败", "卡住"]
+    need_words = ["希望", "想要", "建议", "能否", "可不可以"]
+    severity = "high" if any(w in text for w in high_words) else "medium" if sentiment == "negative" else "low"
+    issue_type = "Bug" if any(w in text for w in bug_words) else "新需求" if any(w in text for w in need_words) else "投诉" if sentiment == "negative" else "咨询"
     return {
         "sentiment": sentiment,
         "product_module": module,
@@ -159,7 +123,7 @@ async def _call_openai_compatible(settings, prompt_type: str, payload: dict[str,
             json={
                 "model": settings.resolved_model,
                 "messages": [
-                    {"role": "system", "content": PROMPTS.get(prompt_type, PROMPTS["default"])},
+                    {"role": "system", "content": get_system_prompt(prompt_type)},
                     {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
                 ],
                 "temperature": 0.2,
@@ -171,33 +135,24 @@ async def _call_openai_compatible(settings, prompt_type: str, payload: dict[str,
         return json.loads(content)
 
 
+def _mock_review(prd: str) -> dict[str, Any]:
+    completeness = int(sum(1 for item in REQUIRED_PRD_SECTIONS if item in prd) / len(REQUIRED_PRD_SECTIONS) * 100)
+    forbidden_hits = [item for item in FORBIDDEN_PRD_SECTIONS if item in prd]
+    return {
+        "quality_score": max(0, completeness - len(forbidden_hits) * 10),
+        "prd_completeness_score": completeness,
+        "evidence_coverage_score": 100,
+        "problems": ([] if completeness >= 100 else ["PRD 章节不完整，未覆盖全部 9 个规定章节。"]) + ([f"包含禁止内容：{', '.join(forbidden_hits)}"] if forbidden_hits else []),
+        "suggestions": ["保持 9 个固定章节，并确保验收标准可测试、埋点指标可落地。"],
+        "hallucination_risk": "low" if completeness >= 100 and not forbidden_hits else "medium",
+        "need_human_review": True,
+    }
+
+
 def _mock_result(prompt_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     text = payload.get("text") or payload.get("task") or json.dumps(payload, ensure_ascii=False)
     if prompt_type == "review":
-        prd = payload.get("prd_markdown", "")
-        required = [
-            "## 1. 背景与问题",
-            "## 2. 目标用户",
-            "## 3. 用户故事",
-            "## 4. 需求范围",
-            "## 5. 功能流程",
-            "## 6. 验收标准",
-            "## 7. 埋点指标",
-            "## 8. 风险点",
-            "## 9. 后续迭代建议",
-        ]
-        completeness = int(sum(1 for item in required if item in prd) / len(required) * 100)
-        forbidden = ["## 证据引用", "## 指标摘要", "evidence id", "证据ID"]
-        forbidden_hits = [item for item in forbidden if item in prd]
-        return {
-            "quality_score": max(0, completeness - len(forbidden_hits) * 10),
-            "prd_completeness_score": completeness,
-            "evidence_coverage_score": 100,
-            "problems": ([] if completeness >= 100 else ["PRD 章节不完整，未覆盖全部 9 个规定章节。"]) + ([f"包含禁止内容：{', '.join(forbidden_hits)}"] if forbidden_hits else []),
-            "suggestions": ["保持 9 个固定章节，并确保验收标准可测试、埋点指标可落地。"],
-            "hallucination_risk": "low" if completeness >= 100 and not forbidden_hits else "medium",
-            "need_human_review": True,
-        }
+        return _mock_review(payload.get("prd_markdown", ""))
     if prompt_type == "compression":
         return {"summary": text[:500], "key_points": text[:500].split("。")[:5]}
     if prompt_type == "prd":

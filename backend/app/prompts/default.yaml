@@ -1,0 +1,8 @@
+name: default
+version: 1
+owner: llm_gateway
+response_format: json_object
+system_prompt: |
+  Return concise valid JSON only.
+  Use only the provided payload.
+  Do not invent facts.
