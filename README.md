@@ -2,32 +2,29 @@
 
 面向产品经理的 Chat-first AI 需求发现工作台，用于用户反馈分析、机会点发现和 PRD 生成。
 
-FeedBackOS 支持用户在一个聊天会话中上传客服工单、App 评论、用户访谈纪要、NPS 开放题、业务指标表、历史 PRD 或版本复盘文件，系统会先完成解析、清洗、结构化入库和向量化，再通过 LangGraph Agent workflow 进行反馈分析、痛点聚类、机会点评估、PRD 生成和 Reviewer 质量评审。
+FeedBackOS 支持用户在一个聊天会话中上传真实业务文件。系统会先完成文件解析、字段识别、清洗、结构化入库和向量化，再通过多 Agent workflow 分析痛点、生成机会点、撰写 PRD，并由 Reviewer 对生成结果进行质量评审。
 
+## 预览
 
-## 当前产品形态
-<img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/57d6456d-e55a-43fc-99a7-75ba02369be2" />
+<img width="1908" height="953" alt="FeedBackOS workspace" src="https://github.com/user-attachments/assets/57d6456d-e55a-43fc-99a7-75ba02369be2" />
+<img width="1908" height="953" alt="FeedBackOS feedback inbox" src="https://github.com/user-attachments/assets/3b856340-ca4a-47f1-af37-b77bd1d578d1" />
+<img width="1908" height="953" alt="FeedBackOS PRD panel" src="https://github.com/user-attachments/assets/1380e5b7-4fae-4847-b77b-251e49fcfa02" />
 
-<img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/3b856340-ca4a-47f1-af37-b77bd1d578d1" />
+## 功能特性
 
-<img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/42242404-b581-4def-a384-8043be913bf8" />
-
-<img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/ce53cd28-5e3c-4957-9358-1b18c839bd84" />
-
-<img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/86c33c05-905c-4cd4-b6f3-9f0205ee75c2" />
-
-## 核心能力
-
-- 文件上传与数据接入：支持 CSV、Excel、TXT、Markdown、DOCX。
-- Schema Detection：识别反馈字段、指标字段和文本类文件类型。
-- 结构化入库：反馈、指标、文档 chunk、Agent trace、PRD、记忆和评估数据写入 SQLite。
-- 轻量 RAG：反馈和文档 chunk 生成 embedding，写入向量检索层；Agent 运行时按当前会话检索相关证据。
-- 多 Agent workflow：Orchestrator、File Intake、Data Intake、Feedback Analyst、Retrieval、Cluster、Metric Analyst、Opportunity、Compression、PRD Writer、Reviewer。
-- 真实 LLM / Mock LLM 双模式：支持 OpenAI-compatible API；没有 Key 或调用失败时使用 mock 规则兜底。
-- Reviewer 评审：检查 PRD 完整度、证据覆盖、幻觉风险、问题和建议。
-- 历史 PRD：可以在同一会话中生成多个痛点对应的 PRD，例如“写一份针对支付体验痛点的 PRD”。
-- Evaluation：从真实运行表计算 Agent、LLM、检索、质量和压缩指标。
-- Fallback：Redis、Milvus 或真实 LLM 不可用时，系统仍可用 fallback/mock 跑完整流程。
+- Chat-first Agent Workspace，在聊天页面上传文件并发起分析任务。
+- 基于 `conversation_id` 的会话级数据隔离。
+- 支持 CSV、Excel、TXT、Markdown、DOCX 文件上传和解析。
+- 自动识别反馈字段、指标字段和文本类文件。
+- 反馈分类：情绪、严重度、产品模块、问题类型、一句话摘要。
+- 轻量 RAG 流程：解析、清洗、入库、向量化、检索、压缩，再调用 LLM。
+- LangGraph 多 Agent workflow：反馈分析、痛点聚类、机会点评分、PRD 生成、Reviewer 评审。
+- 支持在同一会话中生成多份不同痛点的 PRD。
+- PRD 历史面板，支持切换、编辑、保存、导出 Markdown 和 DOCX。
+- Reviewer 面板，展示综合评分、证据覆盖、问题和建议。
+- Evaluation 面板，展示 Agent、LLM、证据、Reviewer 和上下文压缩指标。
+- 支持真实 LLM 和 Mock LLM 双模式。
+- 没有 Redis、Milvus 或真实 API Key 时，仍可通过 fallback/mock 跑完整流程。
 
 ## 技术栈
 
@@ -57,10 +54,10 @@ AI 与检索：
 - YAML Prompt 管理
 - Mock LLM
 - Mock embedding
-- 内存 fallback vector store
+- In-memory fallback vector store
 - Redis 可选
 
-## 架构
+## 系统架构
 
 ```mermaid
 flowchart LR
@@ -81,7 +78,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  A[User task] --> B[Orchestrator]
+  A[用户任务] --> B[Orchestrator]
   B --> C[File Intake]
   C --> D[Data Intake]
   D --> E[Feedback Analyst]
@@ -95,11 +92,17 @@ flowchart TD
   L --> M[Final Reply]
 ```
 
-当前 workflow 以固定顺序为主。Opportunity 节点会根据用户输入选择目标痛点。如果用户说“写一份针对支付体验痛点的 PRD”，系统会优先选择支付相关机会点，而不是始终选择最高优先级机会点。
+当前 workflow 以固定顺序为主。`Opportunity` 节点会根据用户输入选择目标痛点，例如用户输入：
+
+```text
+写一份针对支付体验痛点的 PRD
+```
+
+系统会优先选择支付相关机会点生成 PRD，而不是始终选择最高优先级机会点。
 
 ## 数据处理流程
 
-上传文件不会被直接整体发送给 LLM。
+上传文件不会直接整体进入大模型。
 
 ```text
 上传文件
@@ -189,7 +192,7 @@ npm run dev
 http://localhost:3000
 ```
 
-健康检查：
+后端健康检查：
 
 ```text
 http://localhost:8000/health
@@ -212,46 +215,66 @@ MILVUS_LITE_PATH=./storage/milvus_lite.db
 FRONTEND_ORIGIN=http://localhost:3000
 ```
 
-
-如果没有真实 API Key：
+如果没有真实模型 Key：
 
 ```env
 USE_MOCK_LLM=true
 ```
 
-系统会使用 Mock LLM 和 mock embedding 跑完整流程。
 
-## 如何测试系统效果
+## 项目结构
 
-1. 端到端 Agent workflow 测试  
-   在 Workspace 上传自己的反馈文件，等待解析、入库和向量化完成后，输入“分析当前反馈并生成 Top 机会点和 PRD”。检查右侧 PRD、Reviewer、Evaluation 是否更新。
+```text
+feedbackos-agent/
+  backend/
+    app/
+      agents/
+      api/
+      core/
+      db/
+      prompts/
+      services/
+      vectorstore/
+    uploads/
+    storage/
+    requirements.txt
+    pyproject.toml
+  frontend/
+    app/
+    components/
+    lib/
+  README.md
+  README-ZH.md
+  .env.example
+  docker-compose.yml
+```
 
-2. 指定痛点 PRD 测试  
-   输入“写一份针对支付体验痛点的 PRD”或“写一份针对 AI 回复体验痛点的 PRD”。检查 PRD 历史列表是否生成不同主题的 PRD。
+运行时目录：
 
-3. 分类准确率测试  
-   准备带人工标签的反馈文件，对比 `feedback_items` 中的情绪、模块、严重度和问题类型。
+- `backend/uploads/`：用户上传文件。
+- `backend/storage/exports/`：导出文件，例如 DOCX。
+- `backend/storage/prds/`：PRD 存储目录预留。
+- `backend/storage/feedbackos.db`：本地 SQLite 数据库。
 
-4. 检索 Top-K 可用率测试  
-   输入专题问题，查看 `retrieval_logs` 和右侧结果是否与问题相关。
+这些运行时文件已加入 `.gitignore`，不会上传到 GitHub。
 
-5. PRD 完整度测试  
-   检查生成 PRD 是否包含九个固定章节，并确认没有“证据引用”章节。
+## 测试流程
 
-6. Reviewer 拦截测试  
-   生成 PRD 后查看 Reviewer 面板，确认 problems、suggestions、quality_score 和 evidence_coverage_score 是否合理。
+1. 启动后端和前端。
+2. 打开 `http://localhost:3000`。
+3. 上传反馈 CSV、Excel、TXT、Markdown 或 DOCX 文件。
+4. 查看 `当前文件` 和 `Feedback Inbox`。
+5. 输入：
 
-7. 上下文压缩率测试  
-   多次运行 Agent 后，在 Evaluation 面板查看平均压缩率，并可在 `compression_logs` 中查看原始 token、压缩后 token 和 compression rate。
+```text
+分析当前反馈并生成机会点
+```
 
-## 部署建议
+6. 输入：
 
-本地演示可以使用 SQLite。正式部署建议：
+```text
+写一份针对支付体验痛点的 PRD
+```
 
-- 数据库从 SQLite 迁移到 PostgreSQL。
-- 上传文件使用持久化 volume、S3、OSS 或 MinIO。
-- 后端使用 Gunicorn + Uvicorn worker 或 Docker。
-- 前端使用 `npm run build && npm run start`，或部署到支持 Next.js 的平台。
-- 使用 Nginx/Caddy 做 HTTPS 和反向代理。
-- Redis 和 Milvus 作为可选增强服务部署。
-- 增加用户登录后，需要给 `projects`、`conversations`、`uploaded_files`、`feedback_items`、`prd_documents`、`agent_runs` 等表加用户归属或严格的 project ownership 校验。
+7. 查看 `Insight Cluster`、`PRD`、`Reviewer` 和 `Evaluation` 面板。
+
