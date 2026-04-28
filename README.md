@@ -5,14 +5,14 @@ FeedBackOS 是一个面向产品经理的 Chat-first AI 需求发现工作台。
 
 ## 当前产品形态
 <img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/57d6456d-e55a-43fc-99a7-75ba02369be2" />
+
 <img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/3b856340-ca4a-47f1-af37-b77bd1d578d1" />
-<img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/1380e5b7-4fae-4847-b77b-251e49fcfa02" />
+
+<img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/42242404-b581-4def-a384-8043be913bf8" />
+
 <img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/ce53cd28-5e3c-4957-9358-1b18c839bd84" />
+
 <img width="1908" height="953" alt="image" src="https://github.com/user-attachments/assets/86c33c05-905c-4cd4-b6f3-9f0205ee75c2" />
-
-
-
-
 
 ## 核心能力
 
@@ -438,12 +438,6 @@ MILVUS_LITE_PATH=./storage/milvus_lite.db
 FRONTEND_ORIGIN=http://localhost:3000
 ```
 
-如果使用阿里云百炼 DashScope OpenAI 兼容模式：
-
-- `OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`
-- `OPENAI_MODEL=qwen-plus` 或其他百炼模型名
-- `EMBEDDING_MODEL=text-embedding-v4`
-- `OPENAI_API_KEY` 或 `DASHSCOPE_API_KEY` 配置为百炼 Key
 
 如果没有真实 API Key：
 
@@ -487,11 +481,3 @@ USE_MOCK_LLM=true
 - 使用 Nginx/Caddy 做 HTTPS 和反向代理。
 - Redis 和 Milvus 作为可选增强服务部署。
 - 增加用户登录后，需要给 `projects`、`conversations`、`uploaded_files`、`feedback_items`、`prd_documents`、`agent_runs` 等表加用户归属或严格的 project ownership 校验。
-
-## 项目边界
-
-- 当前项目是本地可运行、可演示的 AI 产品经理实习项目展示系统。
-- 当前没有内置业务 demo 数据。
-- 当前没有真正的多用户登录和权限隔离。
-- 当前 Milvus 以 facade + fallback 为主，便于本地稳定运行。
-- 当前 workflow 是固定顺序为主，Opportunity 阶段支持根据用户问题选择具体痛点。
