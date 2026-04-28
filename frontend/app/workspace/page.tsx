@@ -280,7 +280,7 @@ function PrdPanel({ prds, reviewer, onSaved }: { prds: any[]; reviewer?: any; on
     onSaved();
   }
 
-  return <div className="grid min-h-[650px] grid-cols-[260px_minmax(0,1fr)] gap-3">
+  return <div className="grid min-h-[650px] grid-cols-[190px_minmax(0,1fr)] gap-3">
     <aside className="rounded-md border border-line bg-slate-50 p-3">
       <div className="mb-3 text-sm font-semibold">历史 PRD</div>
       <div className="space-y-2">
@@ -310,7 +310,6 @@ function PrdPanel({ prds, reviewer, onSaved }: { prds: any[]; reviewer?: any; on
       </div>
       {reviewer && selected.id === prds[0]?.id && <div className="rounded-md border border-line bg-slate-50 p-3 text-sm">
         <div className="font-medium">最新 Reviewer 评分：{reviewer.quality_score ?? 0}</div>
-        <div className="mt-1 text-xs text-muted">完整度 {reviewer.prd_completeness_score ?? 0} · 风险 {reviewer.hallucination_risk || "unknown"}</div>
       </div>}
       <textarea className="min-h-[620px] w-full resize-y rounded-md border border-line bg-white p-3 font-mono text-sm leading-6 outline-none focus:border-brand" value={text} onChange={(e) => setText(e.target.value)} />
     </section>
